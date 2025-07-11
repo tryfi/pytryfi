@@ -26,7 +26,7 @@ setup(
     description="Python Interface for TryFi Dog Collars",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/sbabcock23/pytryfi",
+    url="https://github.com/tryfi/pytryfi",
     packages={'pytryfi', 'pytryfi/common'},
     include_package_data=True,
     classifiers=[ "Programming Language :: Python :: 3",
