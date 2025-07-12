@@ -155,6 +155,82 @@ class TestFiPet:
         with pytest.raises(KeyError):
             pet.setCurrentLocation({"invalid": "data"})
     
+    @patch('pytryfi.fiPet.capture_exception')
+    @patch('pytryfi.fiPet.datetime')
+    def test_set_current_location_tryfi_error(self, mock_datetime, mock_capture):
+        """Test TryFiError handling in set current location."""
+        from pytryfi.exceptions import TryFiError
+        
+        # Mock datetime.fromisoformat to raise TryFiError
+        mock_datetime.datetime.fromisoformat.side_effect = TryFiError("Invalid date format")
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        location_data = {
+            "__typename": "Rest",
+            "areaName": "Home",
+            "position": {"latitude": 40.7128, "longitude": -74.0060},
+            "start": "2024-01-01T11:00:00Z"
+        }
+        
+        # Should raise TryFiError due to mocked datetime.fromisoformat failure
+        with pytest.raises(TryFiError, match="Unable to set Pet Location Details"):
+            pet.setCurrentLocation(location_data)
+    
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_set_current_location_generic_error(self, mock_capture):
+        """Test generic Exception handling in set current location."""
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Create data that will trigger the try block but cause a generic Exception
+        location_data = {
+            "__typename": "Rest",
+            "areaName": "Home",
+            "position": {"latitude": "invalid_float", "longitude": -74.0060},  # Will cause ValueError
+            "start": "2024-01-01T11:00:00Z"
+        }
+        
+        # Should catch generic Exception and call capture_exception, but not re-raise
+        pet.setCurrentLocation(location_data)
+        mock_capture.assert_called_once()
+    
+    def test_set_connected_to_user(self):
+        """Test setConnectedTo with ConnectedToUser type."""
+        pet = FiPet("pet123")
+        
+        connection_data = {
+            "__typename": "ConnectedToUser",
+            "user": {"firstName": "John", "lastName": "Doe"}
+        }
+        
+        result = pet.setConnectedTo(connection_data)
+        assert result == "John Doe"
+    
+    def test_set_connected_to_base(self):
+        """Test setConnectedTo with ConnectedToBase type."""
+        pet = FiPet("pet123")
+        
+        connection_data = {
+            "__typename": "ConnectedToBase",
+            "chargingBase": {"id": "base123"}
+        }
+        
+        result = pet.setConnectedTo(connection_data)
+        assert result == "Base ID - base123"
+    
+    def test_set_connected_to_unknown(self):
+        """Test setConnectedTo with unknown connection type."""
+        pet = FiPet("pet123")
+        
+        connection_data = {
+            "__typename": "UnknownType"
+        }
+        
+        result = pet.setConnectedTo(connection_data)
+        assert result is None
+    
     def test_set_stats(self, sample_stats_data):
         """Test setting pet statistics."""
         pet = FiPet("pet123")
@@ -247,6 +323,120 @@ class TestFiPet:
         assert pet._weeklyNap == 25200
         assert pet._monthlySleep == 864000
         assert pet._monthlyNap == 108000
+    
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_set_rest_stats_daily_tryfi_error(self, mock_capture):
+        """Test TryFiError handling in setRestStats for daily stats."""
+        from pytryfi.exceptions import TryFiError
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Mock the int() function to raise TryFiError on the first call during daily processing
+        with patch('builtins.int') as mock_int:
+            mock_int.side_effect = TryFiError("Invalid duration format")
+            
+            daily_data = {"restSummaries": [{"data": {"sleepAmounts": [{"type": "SLEEP", "duration": "invalid"}]}}]}
+            weekly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+            monthly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+            
+            with pytest.raises(TryFiError, match="Unable to set Pet Daily Rest Stats"):
+                pet.setRestStats(daily_data, weekly_data, monthly_data)
+    
+    def test_set_rest_stats_weekly_tryfi_error(self):
+        """Test TryFiError handling in setRestStats for weekly stats."""
+        from pytryfi.exceptions import TryFiError
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Create a custom class that raises TryFiError when iterated in the weekly section
+        class FailOnIterWeekly:
+            def __getitem__(self, key):
+                if key == 'restSummaries':
+                    return [{'data': {'sleepAmounts': self}}]
+                raise TryFiError("Weekly processing error")
+            
+            def __iter__(self):
+                raise TryFiError("Weekly processing error")
+        
+        daily_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        weekly_data = FailOnIterWeekly()
+        monthly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        
+        with patch('pytryfi.fiPet.capture_exception'):
+            with pytest.raises(TryFiError, match="Unable to set Pet Weekly Rest Stats"):
+                pet.setRestStats(daily_data, weekly_data, monthly_data)
+    
+    def test_set_rest_stats_monthly_tryfi_error(self):
+        """Test TryFiError handling in setRestStats for monthly stats."""
+        from pytryfi.exceptions import TryFiError
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Create a custom class that raises TryFiError when iterated in the monthly section
+        class FailOnIterMonthly:
+            def __getitem__(self, key):
+                if key == 'restSummaries':
+                    return [{'data': {'sleepAmounts': self}}]
+                raise TryFiError("Monthly processing error")
+            
+            def __iter__(self):
+                raise TryFiError("Monthly processing error")
+        
+        daily_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        weekly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        monthly_data = FailOnIterMonthly()
+        
+        with patch('pytryfi.fiPet.capture_exception'):
+            with pytest.raises(TryFiError, match="Unable to set Pet Monthly Rest Stats"):
+                pet.setRestStats(daily_data, weekly_data, monthly_data)
+    
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_set_rest_stats_daily_generic_error(self, mock_capture):
+        """Test generic Exception handling in setRestStats for daily stats."""
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Create data that will cause ValueError (not TryFiError) in daily processing
+        daily_data = {"restSummaries": [{"data": {"sleepAmounts": [{"type": "SLEEP", "duration": "invalid_int"}]}}]}
+        weekly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        monthly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        
+        # Should catch generic Exception and call capture_exception, but not re-raise
+        pet.setRestStats(daily_data, weekly_data, monthly_data)
+        mock_capture.assert_called_once()
+    
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_set_rest_stats_weekly_generic_error(self, mock_capture):
+        """Test generic Exception handling in setRestStats for weekly stats."""
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Valid daily, invalid weekly that causes ValueError
+        daily_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        weekly_data = {"restSummaries": [{"data": {"sleepAmounts": [{"type": "SLEEP", "duration": "invalid_int"}]}}]}
+        monthly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        
+        # Should catch generic Exception and call capture_exception, but not re-raise
+        pet.setRestStats(daily_data, weekly_data, monthly_data)
+        mock_capture.assert_called_once()
+    
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_set_rest_stats_monthly_generic_error(self, mock_capture):
+        """Test generic Exception handling in setRestStats for monthly stats."""
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Valid daily and weekly, invalid monthly that causes ValueError
+        daily_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        weekly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
+        monthly_data = {"restSummaries": [{"data": {"sleepAmounts": [{"type": "SLEEP", "duration": "invalid_int"}]}}]}
+        
+        # Should catch generic Exception and call capture_exception, but not re-raise
+        pet.setRestStats(daily_data, weekly_data, monthly_data)
+        mock_capture.assert_called_once()
     
     @patch('pytryfi.query.getCurrentPetRestStats')
     @patch('pytryfi.fiPet.capture_exception')
@@ -394,6 +584,28 @@ class TestFiPet:
         # Should still return True even if device update fails
         assert result is True
     
+    @patch('pytryfi.query.turnOnOffLed')
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_turn_on_off_led_device_update_failure(self, mock_capture, mock_turn_on_off):
+        """Test LED control with device update failure."""
+        mock_turn_on_off.return_value = {
+            "updateDeviceOperationParams": {
+                "id": "device123",
+                "operationParams": {"ledEnabled": True}
+            }
+        }
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        pet._device = Mock(moduleId="module123")
+        pet._device.setDeviceDetailsJSON.side_effect = Exception("Device update failed")
+        
+        result = pet.turnOnOffLed(Mock(), True)
+        
+        # Should still return True even if device update fails, but capture exception
+        assert result is True
+        mock_capture.assert_called_once()
+    
     @patch('pytryfi.query.setLedColor')
     def test_set_led_color_failure(self, mock_set_color):
         """Test LED color change failure."""
@@ -438,6 +650,23 @@ class TestFiPet:
         result = pet.setLostDogMode(Mock(), "ENABLE")
         
         assert result is False
+    
+    @patch('pytryfi.query.setLostDogMode')
+    @patch('pytryfi.fiPet.capture_exception')
+    def test_set_lost_dog_mode_device_update_failure(self, mock_capture, mock_set_lost):
+        """Test lost dog mode with device update failure."""
+        mock_set_lost.return_value = {"updateDeviceOperationParams": {"mode": "LOST"}}
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        pet._device = Mock(moduleId="module123")
+        pet._device.setDeviceDetailsJSON.side_effect = Exception("Device update failed")
+        
+        result = pet.setLostDogMode(Mock(), True)
+        
+        # Should still return True even if device update fails, but capture exception
+        assert result is True
+        mock_capture.assert_called_once()
     
     def test_properties(self):
         """Test all property getters."""
@@ -527,3 +756,48 @@ class TestFiPet:
         assert pet.getCurrPlaceName() == "Home"
         assert pet.getCurrPlaceAddress() == "123 Main St"
         assert pet.getActivityType() == "Rest"
+    
+    def test_utility_getter_methods(self):
+        """Test all utility getter methods."""
+        pet = FiPet("pet123")
+        # Set up the pet with all required attributes
+        pet._yearOfBirth = 2020
+        pet._monthOfBirth = 3
+        pet._dayOfBirth = 15
+        pet._dailySteps = 5000
+        pet._dailyGoal = 7000
+        pet._dailyTotalDistance = 2500.5
+        pet._weeklySteps = 35000
+        pet._weeklyGoal = 49000
+        pet._weeklyTotalDistance = 17500.75
+        pet._monthlySteps = 150000
+        pet._monthlyGoal = 210000
+        pet._monthlyTotalDistance = 75000.25
+        
+        # Test getBirthDate
+        birth_date = pet.getBirthDate()
+        assert birth_date.year == 2020
+        assert birth_date.month == 3
+        assert birth_date.day == 15
+        
+        # Test daily getter methods
+        assert pet.getDailySteps() == 5000
+        assert pet.getDailyGoal() == 7000
+        assert pet.getDailyDistance() == 2500.5
+        
+        # Test weekly getter methods
+        assert pet.getWeeklySteps() == 35000
+        assert pet.getWeeklyGoal() == 49000
+        assert pet.getWeeklyDistance() == 17500.75
+        
+        # Test monthly getter methods
+        assert pet.getMonthlySteps() == 150000
+        assert pet.getMonthlyGoal() == 210000
+        assert pet.getMonthlyDistance() == 75000.25
+    
+    def test_connected_to_property(self):
+        """Test connectedTo property access."""
+        pet = FiPet("pet123")
+        pet._connectedTo = "Cellular Signal Strength - 85"
+        
+        assert pet.connectedTo == "Cellular Signal Strength - 85"
