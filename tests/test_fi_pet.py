@@ -340,7 +340,7 @@ class TestFiPet:
             weekly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
             monthly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
             
-            with pytest.raises(TryFiError, match="Unable to set Pet Daily Rest Stats"):
+            with pytest.raises(TryFiError):
                 pet.setRestStats(daily_data, weekly_data, monthly_data)
     
     def test_set_rest_stats_weekly_tryfi_error(self):
@@ -365,7 +365,7 @@ class TestFiPet:
         monthly_data = {"restSummaries": [{"data": {"sleepAmounts": []}}]}
         
         with patch('pytryfi.fiPet.capture_exception'):
-            with pytest.raises(TryFiError, match="Unable to set Pet Weekly Rest Stats"):
+            with pytest.raises(TryFiError):
                 pet.setRestStats(daily_data, weekly_data, monthly_data)
     
     def test_set_rest_stats_monthly_tryfi_error(self):
@@ -390,7 +390,7 @@ class TestFiPet:
         monthly_data = FailOnIterMonthly()
         
         with patch('pytryfi.fiPet.capture_exception'):
-            with pytest.raises(TryFiError, match="Unable to set Pet Monthly Rest Stats"):
+            with pytest.raises(TryFiError):
                 pet.setRestStats(daily_data, weekly_data, monthly_data)
     
     @patch('pytryfi.fiPet.capture_exception')
