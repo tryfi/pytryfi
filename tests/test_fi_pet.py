@@ -1,0 +1,578 @@
+"""Tests for FiPet class."""
+import pytest
+from datetime import datetime
+from unittest.mock import Mock, patch, MagicMock
+import sentry_sdk
+
+from pytryfi.fiPet import FiPet
+from pytryfi.fiDevice import FiDevice
+from pytryfi.exceptions import TryFiError
+
+
+class TestFiPet:
+    """Test FiPet class."""
+    
+    def test_init(self):
+        """Test pet initialization."""
+        pet = FiPet("pet123")
+        assert pet._petId == "pet123"
+        # FiPet doesn't initialize other attributes in __init__
+        # They are set by setPetDetailsJSON
+    
+    def test_set_pet_details_complete(self, sample_pet_data):
+        """Test setting pet details from complete JSON."""
+        pet = FiPet("pet123")
+        pet.setPetDetailsJSON(sample_pet_data)
+        
+        assert pet._name == "Max"
+        assert pet._breed == "Golden Retriever"
+        assert pet._gender == "MALE"
+        assert pet._weight == 70
+        assert pet._yearOfBirth == 2020
+        assert pet._monthOfBirth == 3
+        assert pet._dayOfBirth == 15
+        assert pet._photoLink == "https://example.com/photo.jpg"
+        assert isinstance(pet._device, FiDevice)
+        assert pet._device._deviceId == "device123"
+    
+    def test_set_pet_details_missing_fields(self):
+        """Test setting pet details with missing fields."""
+        incomplete_data = {
+            "name": "Max",
+            "device": {
+                "id": "device123",
+                "moduleId": "module123",
+                "info": {"batteryPercent": 75},
+                "operationParams": {"ledEnabled": True, "ledOffAt": None, "mode": "NORMAL"},
+                "ledColor": {"name": "BLUE", "hexCode": "#0000FF"},
+                "lastConnectionState": {"__typename": "ConnectedToCellular", "date": "2024-01-01T12:00:00Z"},
+                "availableLedColors": []
+            }
+        }
+        
+        pet = FiPet("pet123")
+        pet.setPetDetailsJSON(incomplete_data)
+        
+        assert pet._name == "Max"
+        assert pet._breed is None
+        assert pet._weight is None
+        assert pet._yearOfBirth == 1900  # Default when missing
+        assert pet._monthOfBirth == 1
+        assert pet._dayOfBirth is None
+        assert pet._photoLink == ""  # Default when no photo
+    
+    def test_set_pet_details_no_photo(self):
+        """Test setting pet details when photo is missing."""
+        data = {
+            "name": "Max",
+            "photos": {},  # No photos
+            "device": {
+                "id": "device123",
+                "moduleId": "module123",
+                "info": {"batteryPercent": 75},
+                "operationParams": {"ledEnabled": True, "ledOffAt": None, "mode": "NORMAL"},
+                "ledColor": {"name": "BLUE", "hexCode": "#0000FF"},
+                "lastConnectionState": {"__typename": "ConnectedToCellular", "date": "2024-01-01T12:00:00Z"},
+                "availableLedColors": []
+            }
+        }
+        
+        pet = FiPet("pet123")
+        pet.setPetDetailsJSON(data)
+        
+        assert pet._photoLink == ""
+    
+    def test_str_representation(self, sample_pet_data):
+        """Test string representation."""
+        pet = FiPet("pet123")
+        # Need to set up pet properly first
+        pet.setPetDetailsJSON(sample_pet_data)
+        pet._homeCityState = "New York, NY"
+        pet._activityType = "Rest"
+        pet._currLatitude = 40.7128
+        pet._currLongitude = -74.0060
+        pet._currStartTime = datetime.now()
+        pet._lastUpdated = datetime.now()
+        
+        result = str(pet)
+        
+        assert "Max" in result
+        assert "New York, NY" in result
+        assert "Rest" in result
+        assert "40.7128" in result
+        assert "-74.0060" in result
+    
+    def test_set_current_location_rest(self, sample_location_data):
+        """Test setting current location for rest activity."""
+        pet = FiPet("pet123")
+        pet.setCurrentLocation(sample_location_data)
+        
+        assert pet._activityType == "Rest"
+        assert pet._areaName == "Home"
+        assert pet._currLatitude == 40.7128
+        assert pet._currLongitude == -74.0060
+        assert pet._currPlaceName == "Home"
+        assert pet._currPlaceAddress == "123 Main St"
+        assert isinstance(pet._currStartTime, datetime)
+        assert isinstance(pet._lastUpdated, datetime)
+    
+    def test_set_current_location_ongoing_walk(self, sample_ongoing_walk_data):
+        """Test setting current location for ongoing walk."""
+        pet = FiPet("pet123")
+        pet.setCurrentLocation(sample_ongoing_walk_data)
+        
+        assert pet._activityType == "OngoingWalk"
+        assert pet._areaName == "Park"
+        # Should use last position for ongoing walk
+        assert pet._currLatitude == 40.7130
+        assert pet._currLongitude == -74.0062
+    
+    def test_set_current_location_no_place(self):
+        """Test setting location without place info."""
+        location_data = {
+            "__typename": "Rest",
+            "areaName": "Unknown",
+            "lastReportTimestamp": "2024-01-01T12:00:00Z",
+            "position": {
+                "latitude": 40.7128,
+                "longitude": -74.0060
+            },
+            "start": "2024-01-01T11:00:00Z"
+        }
+        
+        pet = FiPet("pet123")
+        pet.setCurrentLocation(location_data)
+        
+        assert pet._currPlaceName is None
+        assert pet._currPlaceAddress is None
+    
+    def test_set_current_location_error(self):
+        """Test error handling in set current location."""
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        
+        # Missing required fields should cause an error
+        pet.setCurrentLocation({"invalid": "data"})
+        # The method logs error but doesn't raise for generic exceptions
+    
+    def test_set_stats(self, sample_stats_data):
+        """Test setting pet statistics."""
+        pet = FiPet("pet123")
+        pet.setStats(
+            sample_stats_data["dailyStat"],
+            sample_stats_data["weeklyStat"],
+            sample_stats_data["monthlyStat"]
+        )
+        
+        # Daily stats
+        assert pet._dailyGoal == 5000
+        assert pet._dailySteps == 3000
+        assert pet._dailyTotalDistance == 2000.5
+        
+        # Weekly stats
+        assert pet._weeklyGoal == 35000
+        assert pet._weeklySteps == 21000
+        assert pet._weeklyTotalDistance == 14000.75
+        
+        # Monthly stats
+        assert pet._monthlyGoal == 150000
+        assert pet._monthlySteps == 90000
+        assert pet._monthlyTotalDistance == 60000.25
+    
+    def test_set_stats_missing_weekly_monthly(self):
+        """Test setting stats when weekly/monthly are None."""
+        pet = FiPet("pet123")
+        daily = {"stepGoal": 5000, "totalSteps": 3000, "totalDistance": 2000}
+        
+        pet.setStats(daily, None, None)
+        
+        assert pet._dailyGoal == 5000
+        assert pet._dailySteps == 3000
+        # Weekly/monthly should not be set
+        assert not hasattr(pet, '_weeklyGoal')
+        assert not hasattr(pet, '_monthlyGoal')
+    
+    @patch('pytryfi.query.getCurrentPetStats')
+    def test_update_stats_success(self, mock_get_stats, sample_stats_data):
+        """Test updating pet statistics."""
+        mock_get_stats.return_value = sample_stats_data
+        
+        pet = FiPet("pet123")
+        result = pet.updateStats(Mock())
+        
+        assert result is True
+        assert pet._dailySteps == 3000
+        assert pet._weeklySteps == 21000
+        assert pet._monthlySteps == 90000
+    
+    @patch('pytryfi.query.getCurrentPetStats')
+    @patch('sentry_sdk.capture_exception')
+    def test_update_stats_failure(self, mock_capture, mock_get_stats):
+        """Test update stats failure handling."""
+        mock_get_stats.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        result = pet.updateStats(Mock())
+        
+        assert result is False
+        mock_capture.assert_called_once()
+    
+    def test_extract_sleep(self, sample_rest_stats_data):
+        """Test extracting sleep data."""
+        pet = FiPet("pet123")
+        
+        # Test daily sleep
+        sleep, nap = pet._extractSleep(sample_rest_stats_data["dailyStat"])
+        assert sleep == 28800  # 8 hours in seconds
+        assert nap == 3600     # 1 hour in seconds
+    
+    def test_extract_sleep_missing_data(self):
+        """Test extracting sleep when data is missing."""
+        pet = FiPet("pet123")
+        
+        # Missing sleepAmounts
+        rest_data = {"restSummaries": [{"data": {}}]}
+        sleep, nap = pet._extractSleep(rest_data)
+        assert sleep is None
+        assert nap is None
+    
+    @patch('pytryfi.query.getCurrentPetRestStats')
+    def test_update_rest_stats_success(self, mock_get_rest_stats, sample_rest_stats_data):
+        """Test updating rest statistics."""
+        mock_get_rest_stats.return_value = sample_rest_stats_data
+        
+        pet = FiPet("pet123")
+        result = pet.updateRestStats(Mock())
+        
+        assert result is True
+        assert pet._dailySleep == 28800
+        assert pet._dailyNap == 3600
+        assert pet._weeklySleep == 201600
+        assert pet._weeklyNap == 25200
+        assert pet._monthlySleep == 864000
+        assert pet._monthlyNap == 108000
+    
+    @patch('pytryfi.query.getCurrentPetRestStats')
+    @patch('sentry_sdk.capture_exception')
+    def test_update_rest_stats_failure(self, mock_capture, mock_get_rest_stats):
+        """Test update rest stats failure handling."""
+        mock_get_rest_stats.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        result = pet.updateRestStats(Mock())
+        
+        assert result is False
+        mock_capture.assert_called_once()
+    
+    @patch('pytryfi.query.getCurrentPetLocation')
+    def test_update_pet_location_success(self, mock_get_location, sample_location_data):
+        """Test updating pet location."""
+        mock_get_location.return_value = sample_location_data
+        
+        pet = FiPet("pet123")
+        result = pet.updatePetLocation(Mock())
+        
+        assert result is True
+        assert pet._currLatitude == 40.7128
+        assert pet._currLongitude == -74.0060
+    
+    @patch('pytryfi.query.getCurrentPetLocation')
+    @patch('sentry_sdk.capture_exception')
+    def test_update_pet_location_failure(self, mock_capture, mock_get_location):
+        """Test update location failure handling."""
+        mock_get_location.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        result = pet.updatePetLocation(Mock())
+        
+        assert result is False
+        mock_capture.assert_called_once()
+    
+    @patch('pytryfi.query.getDevicedetails')
+    def test_update_device_details_success(self, mock_get_device, sample_pet_data):
+        """Test updating device details."""
+        mock_get_device.return_value = {"device": sample_pet_data["device"]}
+        
+        pet = FiPet("pet123")
+        pet._device = FiDevice("device123")
+        result = pet.updateDeviceDetails(Mock())
+        
+        assert result is True
+    
+    @patch('pytryfi.query.getDevicedetails')
+    @patch('sentry_sdk.capture_exception')
+    def test_update_device_details_failure(self, mock_capture, mock_get_device):
+        """Test update device failure handling."""
+        mock_get_device.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        pet.device = Mock()
+        result = pet.updateDeviceDetails(Mock())
+        
+        assert result is False
+        mock_capture.assert_called_once()
+    
+    @patch('pytryfi.query.getPetAllInfo')
+    def test_update_all_details(self, mock_get_all_info):
+        """Test updating all pet details."""
+        # Create comprehensive pet data
+        all_info = {
+            "device": {
+                "id": "device123",
+                "moduleId": "module123",
+                "info": {"batteryPercent": 75},
+                "operationParams": {"ledEnabled": True},
+                "ledColor": {"name": "BLUE"},
+                "lastConnectionState": {"__typename": "ConnectedToCellular"}
+            },
+            "ongoingActivity": {
+                "__typename": "Rest",
+                "position": {"latitude": 40.7128, "longitude": -74.0060},
+                "lastReportTimestamp": "2024-01-01T12:00:00Z",
+                "start": "2024-01-01T11:00:00Z"
+            },
+            "dailyStepStat": {"stepGoal": 5000, "totalSteps": 3000, "totalDistance": 2000},
+            "weeklyStepStat": {"stepGoal": 35000, "totalSteps": 21000, "totalDistance": 14000},
+            "monthlyStepStat": {"stepGoal": 150000, "totalSteps": 90000, "totalDistance": 60000},
+            "dailySleepStat": {
+                "restSummaries": [{
+                    "data": {
+                        "sleepAmounts": [
+                            {"type": "SLEEP", "duration": 28800},
+                            {"type": "NAP", "duration": 3600}
+                        ]
+                    }
+                }]
+            },
+            "monthlySleepStat": {
+                "restSummaries": [{
+                    "data": {
+                        "sleepAmounts": [
+                            {"type": "SLEEP", "duration": 864000},
+                            {"type": "NAP", "duration": 108000}
+                        ]
+                    }
+                }]
+            }
+        }
+        mock_get_all_info.return_value = all_info
+        
+        pet = FiPet("pet123")
+        pet._device = FiDevice("device123")
+        pet.updateAllDetails(Mock())
+        
+        # Should update all aspects
+        assert pet._currLatitude == 40.7128
+        assert pet._dailySteps == 3000
+        assert pet._dailySleep == 28800
+    
+    @patch('pytryfi.query.turnOnOffLed')
+    def test_turn_on_led_success(self, mock_turn_on_off):
+        """Test turning on LED."""
+        mock_turn_on_off.return_value = {
+            "setDeviceLed": {
+                "id": "device123",
+                "operationParams": {"ledEnabled": True}
+            }
+        }
+        
+        pet = FiPet("pet123")
+        pet._device = Mock(moduleId="module123")
+        result = pet.turnOnLed(Mock())
+        
+        assert result is True
+        mock_turn_on_off.assert_called_once()
+    
+    @patch('pytryfi.query.turnOnOffLed')
+    def test_turn_on_led_failure(self, mock_turn_on_off):
+        """Test LED control failure."""
+        mock_turn_on_off.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._device = Mock(moduleId="module123")
+        pet._name = "Max"
+        result = pet.turnOnLed(Mock())
+        
+        assert result is False
+    
+    @patch('pytryfi.query.turnOnOffLed')
+    def test_turn_off_led(self, mock_turn_on_off):
+        """Test turning off LED."""
+        mock_turn_on_off.return_value = {"setDeviceLed": {}}
+        
+        pet = FiPet("pet123")
+        pet._device = Mock(moduleId="module123")
+        result = pet.turnOffLed(Mock())
+        
+        assert result is True
+    
+    @patch('pytryfi.query.setLedColor')
+    def test_set_led_color_success(self, mock_set_color):
+        """Test setting LED color."""
+        mock_set_color.return_value = {
+            "setDeviceLed": {
+                "id": "device123",
+                "ledColor": {"name": "GREEN"}
+            }
+        }
+        
+        pet = FiPet("pet123")
+        pet._device = Mock(moduleId="module123", setDeviceDetailsJSON=Mock())
+        result = pet.setLedColorCode(Mock(), 3)
+        
+        assert result is True
+        mock_set_color.assert_called_once()
+        pet._device.setDeviceDetailsJSON.assert_called_once()
+    
+    @patch('pytryfi.query.setLedColor')
+    def test_set_led_color_partial_success(self, mock_set_color):
+        """Test LED color change with device update failure."""
+        mock_set_color.return_value = {"setDeviceLed": {}}
+        
+        pet = FiPet("pet123")
+        pet._device = Mock(moduleId="module123")
+        pet._device.setDeviceDetailsJSON.side_effect = Exception("Parse error")
+        pet._name = "Max"
+        
+        result = pet.setLedColorCode(Mock(), 3)
+        
+        # Should still return True even if device update fails
+        assert result is True
+    
+    @patch('pytryfi.query.setLedColor')
+    def test_set_led_color_failure(self, mock_set_color):
+        """Test LED color change failure."""
+        mock_set_color.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._device = Mock(moduleId="module123")
+        pet._name = "Max"
+        result = pet.setLedColorCode(Mock(), 3)
+        
+        assert result is False
+    
+    @patch('pytryfi.query.setLostDogMode')
+    def test_set_lost_dog_mode_enable(self, mock_set_lost):
+        """Test enabling lost dog mode."""
+        mock_set_lost.return_value = {"setPetMode": {"mode": "LOST"}}
+        
+        pet = FiPet("pet123")
+        result = pet.setLostDogMode(Mock(), "ENABLE")
+        
+        assert result is True
+    
+    @patch('pytryfi.query.setLostDogMode')
+    def test_set_lost_dog_mode_disable(self, mock_set_lost):
+        """Test disabling lost dog mode."""
+        mock_set_lost.return_value = {"setPetMode": {"mode": "NORMAL"}}
+        
+        pet = FiPet("pet123")
+        result = pet.setLostDogMode(Mock(), "DISABLE")
+        
+        assert result is True
+    
+    @patch('pytryfi.query.setLostDogMode')
+    def test_set_lost_dog_mode_failure(self, mock_set_lost):
+        """Test lost mode failure."""
+        mock_set_lost.side_effect = Exception("API Error")
+        
+        pet = FiPet("pet123")
+        pet._name = "Max"
+        result = pet.setLostDogMode(Mock(), "ENABLE")
+        
+        assert result is False
+    
+    def test_properties(self):
+        """Test all property getters."""
+        pet = FiPet("pet123")
+        # Set all properties
+        pet._petId = "pet123"
+        pet._name = "Max"
+        pet._homeCityState = "New York, NY"
+        pet._yearOfBirth = 2020
+        pet._monthOfBirth = 3
+        pet._dayOfBirth = 15
+        pet._gender = "MALE"
+        pet._breed = "Golden Retriever"
+        pet._weight = 70
+        pet._photoLink = "https://example.com/photo.jpg"
+        pet._currLongitude = -74.0060
+        pet._currLatitude = 40.7128
+        pet._currStartTime = datetime.now()
+        pet._currPlaceName = "Home"
+        pet._currPlaceAddress = "123 Main St"
+        pet._dailyGoal = 5000
+        pet._dailySteps = 3000
+        pet._dailyTotalDistance = 2000
+        pet._weeklyGoal = 35000
+        pet._weeklySteps = 21000
+        pet._weeklyTotalDistance = 14000
+        pet._monthlyGoal = 150000
+        pet._monthlySteps = 90000
+        pet._monthlyTotalDistance = 60000
+        pet._dailySleep = 28800
+        pet._dailyNap = 3600
+        pet._weeklySleep = 201600
+        pet._weeklyNap = 25200
+        pet._monthlySleep = 864000
+        pet._monthlyNap = 108000
+        pet._locationLastUpdate = datetime.now()
+        pet._device = Mock(_nextLocationUpdatedExpectedBy=datetime.now())
+        pet._lastUpdated = datetime.now()
+        pet._activityType = "Rest"
+        pet._areaName = "Home"
+        pet._connectionSignalStrength = 85
+        
+        # Test all property getters
+        assert pet.petId == "pet123"
+        assert pet.name == "Max"
+        assert pet.homeCityState == "New York, NY"
+        assert pet.yearOfBirth == 2020
+        assert pet.monthOfBirth == 3
+        assert pet.dayOfBirth == 15
+        assert pet.gender == "MALE"
+        assert pet.breed == "Golden Retriever"
+        assert pet.weight == 70
+        assert pet.photoLink == "https://example.com/photo.jpg"
+        assert pet.currLongitude == -74.0060
+        assert pet.currLatitude == 40.7128
+        assert isinstance(pet.currStartTime, datetime)
+        assert pet.currPlaceName == "Home"
+        assert pet.currPlaceAddress == "123 Main St"
+        assert pet.dailyGoal == 5000
+        assert pet.dailySteps == 3000
+        assert pet.dailyTotalDistance == 2000
+        assert pet.weeklyGoal == 35000
+        assert pet.weeklySteps == 21000
+        assert pet.weeklyTotalDistance == 14000
+        assert pet.monthlyGoal == 150000
+        assert pet.monthlySteps == 90000
+        assert pet.monthlyTotalDistance == 60000
+        assert pet.dailySleep == 28800
+        assert pet.dailyNap == 3600
+        assert pet.weeklySleep == 201600
+        assert pet.weeklyNap == 25200
+        assert pet.monthlySleep == 864000
+        assert pet.monthlyNap == 108000
+        assert isinstance(pet.locationLastUpdate, datetime)
+        assert isinstance(pet.locationNextEstimatedUpdate, datetime)
+        assert isinstance(pet.lastUpdated, datetime)
+        assert pet.activityType == "Rest"
+        assert pet.areaName == "Home"
+        assert pet.signalStrength == 85
+        
+        # Test device property
+        assert pet.device == pet._device
+        
+        # Test isLost
+        pet._device.isLost = True
+        assert pet.isLost is True
+        
+        # Test methods that return properties
+        assert pet.getCurrPlaceName() == "Home"
+        assert pet.getCurrPlaceAddress() == "123 Main St"
+        assert pet.getActivityType() == "Rest"
