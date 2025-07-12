@@ -1,5 +1,6 @@
 import logging
 import datetime
+from sentry_sdk import capture_exception
 from pytryfi.ledColors import ledColors
 from pytryfi.const import PET_MODE_NORMAL, PET_MODE_LOST
 
