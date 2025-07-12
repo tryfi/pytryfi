@@ -15,7 +15,7 @@ As of the last run, the test coverage is:
 | pytryfi/fiDevice.py | 100% | ✅ Complete |
 | pytryfi/fiUser.py | 100% | ✅ Complete |
 | pytryfi/ledColors.py | 100% | ✅ Complete |
-| pytryfi/fiPet.py | 100% | ✅ Perfect |
+| pytryfi/fiPet.py | 100% | ✅ Complete |
 | pytryfi/__init__.py | 58% | ⚠️ Partial |
 | **TOTAL** | **91%** | ✅ Excellent |
 
