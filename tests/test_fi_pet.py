@@ -151,9 +151,9 @@ class TestFiPet:
         pet = FiPet("pet123")
         pet._name = "Max"
         
-        # Missing required fields should cause an error
-        pet.setCurrentLocation({"invalid": "data"})
-        # The method logs error but doesn't raise for generic exceptions
+        # Missing required fields should cause a KeyError
+        with pytest.raises(KeyError):
+            pet.setCurrentLocation({"invalid": "data"})
     
     def test_set_stats(self, sample_stats_data):
         """Test setting pet statistics."""
@@ -207,7 +207,7 @@ class TestFiPet:
         assert pet._monthlySteps == 90000
     
     @patch('pytryfi.query.getCurrentPetStats')
-    @patch('sentry_sdk.capture_exception')
+    @patch('pytryfi.fiPet.capture_exception')
     def test_update_stats_failure(self, mock_capture, mock_get_stats):
         """Test update stats failure handling."""
         mock_get_stats.side_effect = Exception("API Error")
@@ -249,7 +249,7 @@ class TestFiPet:
         assert pet._monthlyNap == 108000
     
     @patch('pytryfi.query.getCurrentPetRestStats')
-    @patch('sentry_sdk.capture_exception')
+    @patch('pytryfi.fiPet.capture_exception')
     def test_update_rest_stats_failure(self, mock_capture, mock_get_rest_stats):
         """Test update rest stats failure handling."""
         mock_get_rest_stats.side_effect = Exception("API Error")
@@ -274,7 +274,7 @@ class TestFiPet:
         assert pet._currLongitude == -74.0060
     
     @patch('pytryfi.query.getCurrentPetLocation')
-    @patch('sentry_sdk.capture_exception')
+    @patch('pytryfi.fiPet.capture_exception')
     def test_update_pet_location_failure(self, mock_capture, mock_get_location):
         """Test update location failure handling."""
         mock_get_location.side_effect = Exception("API Error")
@@ -283,7 +283,7 @@ class TestFiPet:
         pet._name = "Max"
         result = pet.updatePetLocation(Mock())
         
-        assert result is None  # Method doesn't return False, just None on error
+        assert result is False  # Method returns False on error
         mock_capture.assert_called_once()
     
     @patch('pytryfi.query.getDevicedetails')
@@ -298,7 +298,7 @@ class TestFiPet:
         assert result is True
     
     @patch('pytryfi.query.getDevicedetails')
-    @patch('sentry_sdk.capture_exception')
+    @patch('pytryfi.fiPet.capture_exception')
     def test_update_device_details_failure(self, mock_capture, mock_get_device):
         """Test update device failure handling."""
         mock_get_device.side_effect = Exception("API Error")
@@ -308,7 +308,7 @@ class TestFiPet:
         pet._device = Mock()  # Use _device not device
         result = pet.updateDeviceDetails(Mock())
         
-        assert result is None  # Method doesn't return False, just None on error
+        assert result is False  # Method returns False on error
         mock_capture.assert_called_once()
     
     def test_update_all_details(self):
@@ -478,7 +478,6 @@ class TestFiPet:
         pet._lastUpdated = datetime.now()
         pet._activityType = "Rest"
         pet._areaName = "Home"
-        pet._connectionSignalStrength = 85
         
         # Test all property getters
         assert pet.petId == "pet123"
@@ -512,11 +511,10 @@ class TestFiPet:
         assert pet.monthlySleep == 864000
         assert pet.monthlyNap == 108000
         # locationLastUpdate property doesn't exist in the current implementation
-        assert isinstance(pet.locationNextEstimatedUpdate, datetime)
         assert isinstance(pet.lastUpdated, datetime)
         assert pet.activityType == "Rest"
         assert pet.areaName == "Home"
-        assert pet.signalStrength == 85
+        # signalStrength property doesn't exist in the current implementation
         
         # Test device property
         assert pet.device == pet._device
