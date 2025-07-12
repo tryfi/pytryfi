@@ -15,9 +15,9 @@ As of the last run, the test coverage is:
 | pytryfi/fiDevice.py | 100% | ✅ Complete |
 | pytryfi/fiUser.py | 100% | ✅ Complete |
 | pytryfi/ledColors.py | 100% | ✅ Complete |
-| pytryfi/fiPet.py | 87% | ✅ Good |
+| pytryfi/fiPet.py | 100% | ✅ Perfect |
 | pytryfi/__init__.py | 58% | ⚠️ Partial |
-| **TOTAL** | **86%** | ✅ Excellent |
+| **TOTAL** | **91%** | ✅ Excellent |
 
 ## Running Tests
 
@@ -63,18 +63,20 @@ open htmlcov/index.html
 
 ## Test Results
 
-✅ **All 129 tests pass** across Python versions 3.8, 3.9, 3.10, 3.11, and 3.12  
-✅ **86% total test coverage achieved**  
+✅ **All 144 tests pass** across Python versions 3.8, 3.9, 3.10, 3.11, and 3.12  
+✅ **91% total test coverage achieved**  
+✅ **100% coverage for pytryfi/fiPet.py module**  
 ✅ **GitHub Actions CI/CD pipeline working**  
 
 ## Recent Improvements
 
 **Fixed Issues:**
-- ✅ All FiPet tests now pass (30/30)
+- ✅ All FiPet tests now pass (45/45) 
 - ✅ All PyTryFi main class tests now pass (16/16)
 - ✅ Fixed sentry_sdk import and mocking issues
 - ✅ Corrected method signature and property access patterns
-- ✅ Improved error handling test coverage
+- ✅ Achieved 100% test coverage for fiPet.py module
+- ✅ Comprehensive error handling test coverage for all exception paths
 
 ## Future Improvements
 
