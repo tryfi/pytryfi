@@ -14,15 +14,15 @@ class TestPyTryFi:
     """Test PyTryFi main class."""
     
     @patch('pytryfi.requests.Session')
-    @patch('pytryfi.query.getHouseHolds')
+    @patch('pytryfi.common.query.getPetList')
     @patch('pytryfi.PyTryFi.login')
-    def test_init_success(self, mock_login, mock_get_households, mock_session_class,
+    def test_init_success(self, mock_login, mock_get_pet_list, mock_session_class,
                          sample_household_response, sample_pet_data, sample_base_data):
         """Test successful initialization."""
         # Setup mocks
         mock_session = Mock()
         mock_session_class.return_value = mock_session
-        mock_get_households.return_value = sample_household_response()
+        mock_get_pet_list.return_value = sample_household_response()
         
         # Create instance
         api = PyTryFi("test@example.com", "password")
@@ -39,15 +39,15 @@ class TestPyTryFi:
         mock_login.assert_called_once_with("test@example.com", "password")
     
     @patch('pytryfi.requests.Session')
-    @patch('pytryfi.query.getHouseHolds')
+    @patch('pytryfi.common.query.getPetList')
     @patch('pytryfi.PyTryFi.login')
-    def test_init_no_pets(self, mock_login, mock_get_households, mock_session_class,
+    def test_init_no_pets(self, mock_login, mock_get_pet_list, mock_session_class,
                          sample_household_response):
         """Test initialization with no pets."""
         # Setup mocks
         mock_session = Mock()
         mock_session_class.return_value = mock_session
-        mock_get_households.return_value = sample_household_response(pets=[], bases=[])
+        mock_get_pet_list.return_value = sample_household_response(pets=[], bases=[])
         
         # Create instance
         api = PyTryFi("test@example.com", "password")
@@ -57,15 +57,15 @@ class TestPyTryFi:
         assert len(api._bases) == 0
     
     @patch('pytryfi.requests.Session')
-    @patch('pytryfi.query.getHouseHolds')
+    @patch('pytryfi.common.query.getPetList')
     @patch('pytryfi.PyTryFi.login')
-    def test_init_pet_without_collar(self, mock_login, mock_get_households, mock_session_class,
+    def test_init_pet_without_collar(self, mock_login, mock_get_pet_list, mock_session_class,
                                    sample_household_response, sample_pet_without_device):
         """Test initialization with pet that has no collar."""
         # Setup mocks
         mock_session = Mock()
         mock_session_class.return_value = mock_session
-        mock_get_households.return_value = sample_household_response(
+        mock_get_pet_list.return_value = sample_household_response(
             pets=[sample_pet_without_device], 
             bases=[]
         )
@@ -128,7 +128,7 @@ class TestPyTryFi:
         result = PyTryFi.getPet(api, "nonexistent")
         assert result is None
     
-    @patch('pytryfi.query.getBaseList')
+    @patch('pytryfi.common.query.getBaseList')
     def test_update_bases(self, mock_get_base_list):
         """Test updating base stations."""
         api = Mock(spec=PyTryFi)
