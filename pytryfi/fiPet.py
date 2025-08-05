@@ -154,7 +154,7 @@ class FiPet(object):
         self._lastUpdated = datetime.datetime.now()
 
     # set the Pet's behavior stats for daily, weekly and monthly
-    def setBehaviorStats(self, behaviorJSON):
+    def setBehaviorStats(self, behaviorTrends):
         # Initialize all behavior metrics to 0 as default
         self._dailyBarkingCount = 0
         self._dailyBarkingDuration = 0
@@ -192,63 +192,58 @@ class FiPet(object):
         self._monthlyDrinkingDuration = 0
         
         try:
-            if 'behaviorMetrics' in behaviorJSON:
-                metrics = behaviorJSON['behaviorMetrics']
+            # Parse the new health trends API format
+            for trend in behaviorTrends:
+                if not isinstance(trend, dict):
+                    continue
+                    
+                trend_id = trend.get('id', '')
+                summary = trend.get('summaryComponents', {})
                 
-                # Barking
-                if 'dailyBarking' in metrics and metrics['dailyBarking']:
-                    self._dailyBarkingCount = int(metrics['dailyBarking'].get('count', 0))
-                    self._dailyBarkingDuration = int(metrics['dailyBarking'].get('duration', 0))
-                if 'weeklyBarking' in metrics and metrics['weeklyBarking']:
-                    self._weeklyBarkingCount = int(metrics['weeklyBarking'].get('count', 0))
-                    self._weeklyBarkingDuration = int(metrics['weeklyBarking'].get('duration', 0))
-                if 'monthlyBarking' in metrics and metrics['monthlyBarking']:
-                    self._monthlyBarkingCount = int(metrics['monthlyBarking'].get('count', 0))
-                    self._monthlyBarkingDuration = int(metrics['monthlyBarking'].get('duration', 0))
+                # Extract events count from eventsSummary (e.g., "10 events")
+                events_summary = summary.get('eventsSummary', '0 events')
+                events_count = 0
+                if 'event' in events_summary:
+                    try:
+                        events_count = int(events_summary.split()[0])
+                    except:
+                        pass
                 
-                # Licking
-                if 'dailyLicking' in metrics and metrics['dailyLicking']:
-                    self._dailyLickingCount = int(metrics['dailyLicking'].get('count', 0))
-                    self._dailyLickingDuration = int(metrics['dailyLicking'].get('duration', 0))
-                if 'weeklyLicking' in metrics and metrics['weeklyLicking']:
-                    self._weeklyLickingCount = int(metrics['weeklyLicking'].get('count', 0))
-                    self._weeklyLickingDuration = int(metrics['weeklyLicking'].get('duration', 0))
-                if 'monthlyLicking' in metrics and metrics['monthlyLicking']:
-                    self._monthlyLickingCount = int(metrics['monthlyLicking'].get('count', 0))
-                    self._monthlyLickingDuration = int(metrics['monthlyLicking'].get('duration', 0))
+                # Extract duration from durationSummary (e.g., "7m" or "1h 5m")
+                duration_summary = summary.get('durationSummary', '0m')
+                duration_seconds = 0
+                try:
+                    # Handle "<1m" case
+                    if duration_summary.startswith('<'):
+                        duration_seconds = 30  # Assume 30 seconds for <1m
+                    else:
+                        # Parse hours and minutes
+                        parts = duration_summary.replace('h', '').replace('m', '').split()
+                        if len(parts) == 2:  # "1h 5m" format
+                            duration_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60
+                        elif 'h' in duration_summary:  # "1h" format
+                            duration_seconds = int(parts[0]) * 3600
+                        else:  # "5m" format
+                            duration_seconds = int(parts[0]) * 60
+                except:
+                    pass
                 
-                # Scratching
-                if 'dailyScratching' in metrics and metrics['dailyScratching']:
-                    self._dailyScratchingCount = int(metrics['dailyScratching'].get('count', 0))
-                    self._dailyScratchingDuration = int(metrics['dailyScratching'].get('duration', 0))
-                if 'weeklyScratching' in metrics and metrics['weeklyScratching']:
-                    self._weeklyScratchingCount = int(metrics['weeklyScratching'].get('count', 0))
-                    self._weeklyScratchingDuration = int(metrics['weeklyScratching'].get('duration', 0))
-                if 'monthlyScratching' in metrics and metrics['monthlyScratching']:
-                    self._monthlyScratchingCount = int(metrics['monthlyScratching'].get('count', 0))
-                    self._monthlyScratchingDuration = int(metrics['monthlyScratching'].get('duration', 0))
-                
-                # Eating
-                if 'dailyEating' in metrics and metrics['dailyEating']:
-                    self._dailyEatingCount = int(metrics['dailyEating'].get('count', 0))
-                    self._dailyEatingDuration = int(metrics['dailyEating'].get('duration', 0))
-                if 'weeklyEating' in metrics and metrics['weeklyEating']:
-                    self._weeklyEatingCount = int(metrics['weeklyEating'].get('count', 0))
-                    self._weeklyEatingDuration = int(metrics['weeklyEating'].get('duration', 0))
-                if 'monthlyEating' in metrics and metrics['monthlyEating']:
-                    self._monthlyEatingCount = int(metrics['monthlyEating'].get('count', 0))
-                    self._monthlyEatingDuration = int(metrics['monthlyEating'].get('duration', 0))
-                
-                # Drinking
-                if 'dailyDrinking' in metrics and metrics['dailyDrinking']:
-                    self._dailyDrinkingCount = int(metrics['dailyDrinking'].get('count', 0))
-                    self._dailyDrinkingDuration = int(metrics['dailyDrinking'].get('duration', 0))
-                if 'weeklyDrinking' in metrics and metrics['weeklyDrinking']:
-                    self._weeklyDrinkingCount = int(metrics['weeklyDrinking'].get('count', 0))
-                    self._weeklyDrinkingDuration = int(metrics['weeklyDrinking'].get('duration', 0))
-                if 'monthlyDrinking' in metrics and metrics['monthlyDrinking']:
-                    self._monthlyDrinkingCount = int(metrics['monthlyDrinking'].get('count', 0))
-                    self._monthlyDrinkingDuration = int(metrics['monthlyDrinking'].get('duration', 0))
+                # Map trend IDs to our attributes (daily stats only for now)
+                if trend_id == 'barking:DAY':
+                    self._dailyBarkingCount = events_count
+                    self._dailyBarkingDuration = duration_seconds
+                elif trend_id == 'cleaning_self:DAY':  # This is licking
+                    self._dailyLickingCount = events_count
+                    self._dailyLickingDuration = duration_seconds
+                elif trend_id == 'scratching:DAY':
+                    self._dailyScratchingCount = events_count
+                    self._dailyScratchingDuration = duration_seconds
+                elif trend_id == 'eating:DAY':
+                    self._dailyEatingCount = events_count
+                    self._dailyEatingDuration = duration_seconds
+                elif trend_id == 'drinking:DAY':
+                    self._dailyDrinkingCount = events_count
+                    self._dailyDrinkingDuration = duration_seconds
                     
         except Exception as e:
             LOGGER.warning(f"Unable to parse behavior metrics for Pet {self.name}. This may be an older collar model.\nException: {e}")
@@ -323,8 +318,10 @@ class FiPet(object):
     # Update the behavior stats of the pet
     def updateBehaviorStats(self, sessionId):
         try:
-            pBehaviorStatsJSON = query.getCurrentPetBehaviorStats(sessionId,self.petId)
-            self.setBehaviorStats(pBehaviorStatsJSON)
+            # Get health trends which include behavior data
+            healthTrendsJSON = query.getPetHealthTrends(sessionId, self.petId, 'DAY')
+            behavior_trends = healthTrendsJSON.get('behaviorTrends', [])
+            self.setBehaviorStats(behavior_trends)
             return True
         except Exception as e:
             LOGGER.warning(f"Could not update behavior stats for Pet {self.name}. This may be an older collar model.\n{e}")
@@ -359,7 +356,7 @@ class FiPet(object):
         self.updatePetLocation(sessionId)
         self.updateStats(sessionId)
         self.updateRestStats(sessionId)
-        # self.updateBehaviorStats(sessionId)  # Commented until API supports it
+        self.updateBehaviorStats(sessionId)  # Now supported via health trends API
 
     # set the color code of the led light on the pet collar
     def setLedColorCode(self, sessionId, colorCode):

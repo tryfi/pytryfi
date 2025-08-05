@@ -53,11 +53,20 @@ def getCurrentPetRestStats(sessionId, petId):
     LOGGER.debug(f"getCurrentPetStats: {response}")
     return response['data']['pet']
 
-# def getCurrentPetBehaviorStats(sessionId, petId):
-#     qString = QUERY_PET_BEHAVIOR.replace(VAR_PET_ID, petId) + FRAGMENT_BEHAVIOR_DETAILS
-#     response = query(sessionId, qString)
-#     LOGGER.debug(f"getCurrentPetBehaviorStats: {response}")
-#     return response['data']['pet']
+def getPetHealthTrends(sessionId, petId, period='DAY'):
+    """Get pet health trends including behavior data"""
+    if period == 'DAY':
+        qString = QUERY_PET_HEALTH_TRENDS_DAILY.replace(VAR_PET_ID, petId) + FRAGMENT_PET_HEALTH_TREND_DETAILS
+    elif period == 'WEEK':
+        qString = QUERY_PET_HEALTH_TRENDS_WEEKLY.replace(VAR_PET_ID, petId) + FRAGMENT_PET_HEALTH_TREND_DETAILS
+    elif period == 'MONTH':
+        qString = QUERY_PET_HEALTH_TRENDS_MONTHLY.replace(VAR_PET_ID, petId) + FRAGMENT_PET_HEALTH_TREND_DETAILS
+    else:
+        raise ValueError(f"Invalid period: {period}")
+    
+    response = query(sessionId, qString)
+    LOGGER.debug(f"getPetHealthTrends: {response}")
+    return response['data']['getPetHealthTrendsForPet']
 
 def getDevicedetails(sessionId, petId):
     qString = QUERY_PET_DEVICE_DETAILS.replace(VAR_PET_ID, petId) + FRAGMENT_PET_PROFILE + FRAGEMENT_BASE_PET_PROFILE + FRAGMENT_DEVICE_DETAILS + FRAGMENT_LED_DETAILS + FRAGMENT_OPERATIONAL_DETAILS + FRAGMENT_CONNECTION_STATE_DETAILS + FRAGMENT_USER_DETAILS + FRAGMENT_BREED_DETAILS + FRAGMENT_PHOTO_DETAILS

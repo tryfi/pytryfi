@@ -113,12 +113,11 @@ class PyTryFi(object):
                     #get the daily, weekly and monthly rest stats and set
                     pRestStatsJSON = query.getCurrentPetRestStats(self._session,p._petId)
                     p.setRestStats(pRestStatsJSON['dailyStat'],pRestStatsJSON['weeklyStat'],pRestStatsJSON['monthlyStat'])
-                    #get behavior stats if available (Series 3+ only) - Commented until API supports it
-                    # try:
-                    #     pBehaviorStatsJSON = query.getCurrentPetBehaviorStats(self._session,p._petId)
-                    #     p.setBehaviorStats(pBehaviorStatsJSON)
-                    # except Exception as e:
-                    #     LOGGER.debug(f"Behavior stats not available for {p._name} - likely not a Series 3+ collar")
+                    #get behavior stats if available - Now supported via health trends API
+                    try:
+                        p.updateBehaviorStats(self._session)
+                    except Exception as e:
+                        LOGGER.debug(f"Behavior stats not available for {p._name}: {e}")
                     if p._device:
                         LOGGER.debug(f"Adding Pet: {p._name} with Device: {p._device._deviceId}")
                         updatedPets.append(p)
