@@ -48,6 +48,42 @@ class FiPet(object):
         self._device = FiDevice(petJSON['device']['id'])
         self._device.setDeviceDetailsJSON(petJSON['device'])
         self._connectedTo = self.setConnectedTo(petJSON['device']['lastConnectionState'])
+        
+        # Initialize behavior metrics to 0 (will be updated later if available)
+        self._dailyBarkingCount = 0
+        self._dailyBarkingDuration = 0
+        self._weeklyBarkingCount = 0
+        self._weeklyBarkingDuration = 0
+        self._monthlyBarkingCount = 0
+        self._monthlyBarkingDuration = 0
+        
+        self._dailyLickingCount = 0
+        self._dailyLickingDuration = 0
+        self._weeklyLickingCount = 0
+        self._weeklyLickingDuration = 0
+        self._monthlyLickingCount = 0
+        self._monthlyLickingDuration = 0
+        
+        self._dailyScratchingCount = 0
+        self._dailyScratchingDuration = 0
+        self._weeklyScratchingCount = 0
+        self._weeklyScratchingDuration = 0
+        self._monthlyScratchingCount = 0
+        self._monthlyScratchingDuration = 0
+        
+        self._dailyEatingCount = 0
+        self._dailyEatingDuration = 0
+        self._weeklyEatingCount = 0
+        self._weeklyEatingDuration = 0
+        self._monthlyEatingCount = 0
+        self._monthlyEatingDuration = 0
+        
+        self._dailyDrinkingCount = 0
+        self._dailyDrinkingDuration = 0
+        self._weeklyDrinkingCount = 0
+        self._weeklyDrinkingDuration = 0
+        self._monthlyDrinkingCount = 0
+        self._monthlyDrinkingDuration = 0
 
     def __str__(self):
         return f"Last Updated - {self.lastUpdated} - Pet ID: {self.petId} Name: {self.name} Is Lost: {self.isLost} From: {self.homeCityState} ActivityType: {self.activityType} Located: {self.currLatitude},{self.currLongitude} Last Updated: {self.currStartTime}\n \
@@ -110,6 +146,107 @@ class FiPet(object):
         self._monthlyTotalDistance = float(activityJSONMonthly['totalDistance'])
 
         self._lastUpdated = datetime.datetime.now()
+
+    # set the Pet's behavior stats for daily, weekly and monthly
+    def setBehaviorStats(self, behaviorJSON):
+        # Initialize all behavior metrics to 0 as default
+        self._dailyBarkingCount = 0
+        self._dailyBarkingDuration = 0
+        self._weeklyBarkingCount = 0
+        self._weeklyBarkingDuration = 0
+        self._monthlyBarkingCount = 0
+        self._monthlyBarkingDuration = 0
+        
+        self._dailyLickingCount = 0
+        self._dailyLickingDuration = 0
+        self._weeklyLickingCount = 0
+        self._weeklyLickingDuration = 0
+        self._monthlyLickingCount = 0
+        self._monthlyLickingDuration = 0
+        
+        self._dailyScratchingCount = 0
+        self._dailyScratchingDuration = 0
+        self._weeklyScratchingCount = 0
+        self._weeklyScratchingDuration = 0
+        self._monthlyScratchingCount = 0
+        self._monthlyScratchingDuration = 0
+        
+        self._dailyEatingCount = 0
+        self._dailyEatingDuration = 0
+        self._weeklyEatingCount = 0
+        self._weeklyEatingDuration = 0
+        self._monthlyEatingCount = 0
+        self._monthlyEatingDuration = 0
+        
+        self._dailyDrinkingCount = 0
+        self._dailyDrinkingDuration = 0
+        self._weeklyDrinkingCount = 0
+        self._weeklyDrinkingDuration = 0
+        self._monthlyDrinkingCount = 0
+        self._monthlyDrinkingDuration = 0
+        
+        try:
+            if 'behaviorMetrics' in behaviorJSON:
+                metrics = behaviorJSON['behaviorMetrics']
+                
+                # Barking
+                if 'dailyBarking' in metrics and metrics['dailyBarking']:
+                    self._dailyBarkingCount = int(metrics['dailyBarking'].get('count', 0))
+                    self._dailyBarkingDuration = int(metrics['dailyBarking'].get('duration', 0))
+                if 'weeklyBarking' in metrics and metrics['weeklyBarking']:
+                    self._weeklyBarkingCount = int(metrics['weeklyBarking'].get('count', 0))
+                    self._weeklyBarkingDuration = int(metrics['weeklyBarking'].get('duration', 0))
+                if 'monthlyBarking' in metrics and metrics['monthlyBarking']:
+                    self._monthlyBarkingCount = int(metrics['monthlyBarking'].get('count', 0))
+                    self._monthlyBarkingDuration = int(metrics['monthlyBarking'].get('duration', 0))
+                
+                # Licking
+                if 'dailyLicking' in metrics and metrics['dailyLicking']:
+                    self._dailyLickingCount = int(metrics['dailyLicking'].get('count', 0))
+                    self._dailyLickingDuration = int(metrics['dailyLicking'].get('duration', 0))
+                if 'weeklyLicking' in metrics and metrics['weeklyLicking']:
+                    self._weeklyLickingCount = int(metrics['weeklyLicking'].get('count', 0))
+                    self._weeklyLickingDuration = int(metrics['weeklyLicking'].get('duration', 0))
+                if 'monthlyLicking' in metrics and metrics['monthlyLicking']:
+                    self._monthlyLickingCount = int(metrics['monthlyLicking'].get('count', 0))
+                    self._monthlyLickingDuration = int(metrics['monthlyLicking'].get('duration', 0))
+                
+                # Scratching
+                if 'dailyScratching' in metrics and metrics['dailyScratching']:
+                    self._dailyScratchingCount = int(metrics['dailyScratching'].get('count', 0))
+                    self._dailyScratchingDuration = int(metrics['dailyScratching'].get('duration', 0))
+                if 'weeklyScratching' in metrics and metrics['weeklyScratching']:
+                    self._weeklyScratchingCount = int(metrics['weeklyScratching'].get('count', 0))
+                    self._weeklyScratchingDuration = int(metrics['weeklyScratching'].get('duration', 0))
+                if 'monthlyScratching' in metrics and metrics['monthlyScratching']:
+                    self._monthlyScratchingCount = int(metrics['monthlyScratching'].get('count', 0))
+                    self._monthlyScratchingDuration = int(metrics['monthlyScratching'].get('duration', 0))
+                
+                # Eating
+                if 'dailyEating' in metrics and metrics['dailyEating']:
+                    self._dailyEatingCount = int(metrics['dailyEating'].get('count', 0))
+                    self._dailyEatingDuration = int(metrics['dailyEating'].get('duration', 0))
+                if 'weeklyEating' in metrics and metrics['weeklyEating']:
+                    self._weeklyEatingCount = int(metrics['weeklyEating'].get('count', 0))
+                    self._weeklyEatingDuration = int(metrics['weeklyEating'].get('duration', 0))
+                if 'monthlyEating' in metrics and metrics['monthlyEating']:
+                    self._monthlyEatingCount = int(metrics['monthlyEating'].get('count', 0))
+                    self._monthlyEatingDuration = int(metrics['monthlyEating'].get('duration', 0))
+                
+                # Drinking
+                if 'dailyDrinking' in metrics and metrics['dailyDrinking']:
+                    self._dailyDrinkingCount = int(metrics['dailyDrinking'].get('count', 0))
+                    self._dailyDrinkingDuration = int(metrics['dailyDrinking'].get('duration', 0))
+                if 'weeklyDrinking' in metrics and metrics['weeklyDrinking']:
+                    self._weeklyDrinkingCount = int(metrics['weeklyDrinking'].get('count', 0))
+                    self._weeklyDrinkingDuration = int(metrics['weeklyDrinking'].get('duration', 0))
+                if 'monthlyDrinking' in metrics and metrics['monthlyDrinking']:
+                    self._monthlyDrinkingCount = int(metrics['monthlyDrinking'].get('count', 0))
+                    self._monthlyDrinkingDuration = int(metrics['monthlyDrinking'].get('duration', 0))
+                    
+        except Exception as e:
+            LOGGER.warning(f"Unable to parse behavior metrics for Pet {self.name}. This may be an older collar model.\nException: {e}")
+            capture_exception(e)
 
     # set the Pet's current rest details for daily, weekly and monthly
     def setRestStats(self, restJSONDaily, restJSONWeekly, restJSONMonthly):
@@ -177,6 +314,17 @@ class FiPet(object):
             LOGGER.error(f"Could not update rest stats for Pet {self.name}.\n{e}")
             capture_exception(e)
 
+    # Update the behavior stats of the pet
+    def updateBehaviorStats(self, sessionId):
+        try:
+            pBehaviorStatsJSON = query.getCurrentPetBehaviorStats(sessionId,self.petId)
+            self.setBehaviorStats(pBehaviorStatsJSON)
+            return True
+        except Exception as e:
+            LOGGER.warning(f"Could not update behavior stats for Pet {self.name}. This may be an older collar model.\n{e}")
+            # Don't capture exception for behavior stats as they may not be available on older collars
+            return False
+
     # Update the Pet's GPS location
     def updatePetLocation(self, sessionId):
         try:
@@ -205,6 +353,7 @@ class FiPet(object):
         self.updatePetLocation(sessionId)
         self.updateStats(sessionId)
         self.updateRestStats(sessionId)
+        self.updateBehaviorStats(sessionId)
 
     # set the color code of the led light on the pet collar
     def setLedColorCode(self, sessionId, colorCode):
@@ -349,6 +498,106 @@ class FiPet(object):
     @property
     def monthlyNap(self):
         return self._monthlyNap
+    
+    # Barking properties
+    @property
+    def dailyBarkingCount(self):
+        return self._dailyBarkingCount
+    @property
+    def dailyBarkingDuration(self):
+        return self._dailyBarkingDuration
+    @property
+    def weeklyBarkingCount(self):
+        return self._weeklyBarkingCount
+    @property
+    def weeklyBarkingDuration(self):
+        return self._weeklyBarkingDuration
+    @property
+    def monthlyBarkingCount(self):
+        return self._monthlyBarkingCount
+    @property
+    def monthlyBarkingDuration(self):
+        return self._monthlyBarkingDuration
+    
+    # Licking properties
+    @property
+    def dailyLickingCount(self):
+        return self._dailyLickingCount
+    @property
+    def dailyLickingDuration(self):
+        return self._dailyLickingDuration
+    @property
+    def weeklyLickingCount(self):
+        return self._weeklyLickingCount
+    @property
+    def weeklyLickingDuration(self):
+        return self._weeklyLickingDuration
+    @property
+    def monthlyLickingCount(self):
+        return self._monthlyLickingCount
+    @property
+    def monthlyLickingDuration(self):
+        return self._monthlyLickingDuration
+    
+    # Scratching properties
+    @property
+    def dailyScratchingCount(self):
+        return self._dailyScratchingCount
+    @property
+    def dailyScratchingDuration(self):
+        return self._dailyScratchingDuration
+    @property
+    def weeklyScratchingCount(self):
+        return self._weeklyScratchingCount
+    @property
+    def weeklyScratchingDuration(self):
+        return self._weeklyScratchingDuration
+    @property
+    def monthlyScratchingCount(self):
+        return self._monthlyScratchingCount
+    @property
+    def monthlyScratchingDuration(self):
+        return self._monthlyScratchingDuration
+    
+    # Eating properties
+    @property
+    def dailyEatingCount(self):
+        return self._dailyEatingCount
+    @property
+    def dailyEatingDuration(self):
+        return self._dailyEatingDuration
+    @property
+    def weeklyEatingCount(self):
+        return self._weeklyEatingCount
+    @property
+    def weeklyEatingDuration(self):
+        return self._weeklyEatingDuration
+    @property
+    def monthlyEatingCount(self):
+        return self._monthlyEatingCount
+    @property
+    def monthlyEatingDuration(self):
+        return self._monthlyEatingDuration
+    
+    # Drinking properties
+    @property
+    def dailyDrinkingCount(self):
+        return self._dailyDrinkingCount
+    @property
+    def dailyDrinkingDuration(self):
+        return self._dailyDrinkingDuration
+    @property
+    def weeklyDrinkingCount(self):
+        return self._weeklyDrinkingCount
+    @property
+    def weeklyDrinkingDuration(self):
+        return self._weeklyDrinkingDuration
+    @property
+    def monthlyDrinkingCount(self):
+        return self._monthlyDrinkingCount
+    @property
+    def monthlyDrinkingDuration(self):
+        return self._monthlyDrinkingDuration
 
     @property
     def lastUpdated(self):

@@ -2,6 +2,7 @@ import logging
 import datetime
 from pytryfi.ledColors import ledColors
 from pytryfi.const import PET_MODE_NORMAL, PET_MODE_LOST
+from sentry_sdk import capture_exception
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +35,13 @@ class FiDevice(object):
             for cString in deviceJSON['availableLedColors']:
                 c = ledColors(int(cString['ledColorCode']),cString['hexCode'], cString['name'] )
                 self._availableLedColors.append(c)
+            
+            # Enhanced Series 3+ fields (may not be available on older collars)
+            self._firmwareVersion = deviceJSON.get('firmwareVersion', 'Unknown')
+            self._hardwareVersion = deviceJSON.get('hardwareVersion', 'Unknown')
+            self._gpsAccuracy = deviceJSON.get('gpsAccuracy', None)
+            self._signalStrength = deviceJSON.get('signalStrength', None)
+            self._signalType = deviceJSON.get('signalType', None)
         except Exception as e:
             LOGGER.debug(f"tryfi Error: {e}")
             capture_exception(e)
@@ -93,6 +101,21 @@ class FiDevice(object):
             return True
         else:
             return False
+    @property
+    def firmwareVersion(self):
+        return self._firmwareVersion
+    @property
+    def hardwareVersion(self):
+        return self._hardwareVersion
+    @property
+    def gpsAccuracy(self):
+        return self._gpsAccuracy
+    @property
+    def signalStrength(self):
+        return self._signalStrength
+    @property
+    def signalType(self):
+        return self._signalType
 
 #This is created because if TryFi automatically turns off the LED, the status is still set to true in the api.
 #This will compare the dates to see if the current date/time is greater than the turnoffat time in the api.

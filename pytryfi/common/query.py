@@ -53,6 +53,12 @@ def getCurrentPetRestStats(sessionId, petId):
     LOGGER.debug(f"getCurrentPetStats: {response}")
     return response['data']['pet']
 
+def getCurrentPetBehaviorStats(sessionId, petId):
+    qString = QUERY_PET_BEHAVIOR.replace(VAR_PET_ID, petId) + FRAGMENT_BEHAVIOR_DETAILS
+    response = query(sessionId, qString)
+    LOGGER.debug(f"getCurrentPetBehaviorStats: {response}")
+    return response['data']['pet']
+
 def getDevicedetails(sessionId, petId):
     qString = QUERY_PET_DEVICE_DETAILS.replace(VAR_PET_ID, petId) + FRAGMENT_PET_PROFILE + FRAGEMENT_BASE_PET_PROFILE + FRAGMENT_DEVICE_DETAILS + FRAGMENT_LED_DETAILS + FRAGMENT_OPERATIONAL_DETAILS + FRAGMENT_CONNECTION_STATE_DETAILS + FRAGMENT_USER_DETAILS + FRAGMENT_BREED_DETAILS + FRAGMENT_PHOTO_DETAILS
     response = query(sessionId, qString)

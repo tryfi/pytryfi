@@ -53,6 +53,12 @@ class PyTryFi(object):
                         #get the daily, weekly and monthly rest stats and set
                         pRestStatsJSON = query.getCurrentPetRestStats(self._session,p._petId)
                         p.setRestStats(pRestStatsJSON['dailyStat'],pRestStatsJSON['weeklyStat'],pRestStatsJSON['monthlyStat'])
+                        #get behavior stats if available (Series 3+ only)
+                        try:
+                            pBehaviorStatsJSON = query.getCurrentPetBehaviorStats(self._session,p._petId)
+                            p.setBehaviorStats(pBehaviorStatsJSON)
+                        except Exception as e:
+                            LOGGER.debug(f"Behavior stats not available for {p._name} - likely not a Series 3+ collar")
                         LOGGER.debug(f"Adding Pet: {p._name} with Device: {p._device._deviceId}")
                         self._pets.append(p)
                     else:
@@ -105,6 +111,12 @@ class PyTryFi(object):
                     #get the daily, weekly and monthly rest stats and set
                     pRestStatsJSON = query.getCurrentPetRestStats(self._session,p._petId)
                     p.setRestStats(pRestStatsJSON['dailyStat'],pRestStatsJSON['weeklyStat'],pRestStatsJSON['monthlyStat'])
+                    #get behavior stats if available (Series 3+ only)
+                    try:
+                        pBehaviorStatsJSON = query.getCurrentPetBehaviorStats(self._session,p._petId)
+                        p.setBehaviorStats(pBehaviorStatsJSON)
+                    except Exception as e:
+                        LOGGER.debug(f"Behavior stats not available for {p._name} - likely not a Series 3+ collar")
                     LOGGER.debug(f"Adding Pet: {p._name} with Device: {p._device._deviceId}")
                     updatedPets.append(p)
             self._pets = updatedPets
