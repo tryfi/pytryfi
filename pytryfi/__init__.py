@@ -1,12 +1,12 @@
 import logging
 import requests
 
-from pytryfi.const import (API_HOST_URL_BASE, API_LOGIN, PYTRYFI_VERSION, HEADER)
-from pytryfi.fiUser import FiUser
-from pytryfi.fiPet import FiPet
-from pytryfi.fiBase import FiBase
-from pytryfi.common import query
-from pytryfi.const import SENTRY_URL
+from .const import (API_HOST_URL_BASE, API_LOGIN, PYTRYFI_VERSION, HEADER)
+from .fiUser import FiUser
+from .fiPet import FiPet
+from .fiBase import FiBase
+from .common import query
+from .const import SENTRY_URL
 import sentry_sdk
 from sentry_sdk import capture_message, capture_exception
 
@@ -18,6 +18,10 @@ class PyTryFi(object):
     """base object for TryFi"""
 
     def __init__(self, username=None, password=None):
+        # Initialize empty lists first to avoid AttributeError
+        self._pets = []
+        self._bases = []
+        
         try:
             sentry = sentry_sdk.init(
                     SENTRY_URL,
@@ -37,7 +41,6 @@ class PyTryFi(object):
 
             petListJSON = query.getPetList(self._session)
             h = 0
-            self._pets = []
             for house in petListJSON:
                 for pet in petListJSON[h]['household']['pets']:
                     #If pet doesn't have a collar then ignore it. What good is a pet without a collar!
@@ -53,13 +56,18 @@ class PyTryFi(object):
                         #get the daily, weekly and monthly rest stats and set
                         pRestStatsJSON = query.getCurrentPetRestStats(self._session,p._petId)
                         p.setRestStats(pRestStatsJSON['dailyStat'],pRestStatsJSON['weeklyStat'],pRestStatsJSON['monthlyStat'])
+                        #get behavior stats if available (Series 3+ only) - Commented until API supports it
+                        # try:
+                        #     pBehaviorStatsJSON = query.getCurrentPetBehaviorStats(self._session,p._petId)
+                        #     p.setBehaviorStats(pBehaviorStatsJSON)
+                        # except Exception as e:
+                        #     LOGGER.debug(f"Behavior stats not available for {p._name} - likely not a Series 3+ collar")
                         LOGGER.debug(f"Adding Pet: {p._name} with Device: {p._device._deviceId}")
                         self._pets.append(p)
                     else:
                         LOGGER.warning(f"Pet {pet['name']} - {pet['id']} has no collar. Ignoring Pet!")
                 h = h + 1
             
-            self._bases = []
             baseListJSON = query.getBaseList(self._session)
             h = 0
             for house in baseListJSON:
@@ -105,8 +113,16 @@ class PyTryFi(object):
                     #get the daily, weekly and monthly rest stats and set
                     pRestStatsJSON = query.getCurrentPetRestStats(self._session,p._petId)
                     p.setRestStats(pRestStatsJSON['dailyStat'],pRestStatsJSON['weeklyStat'],pRestStatsJSON['monthlyStat'])
-                    LOGGER.debug(f"Adding Pet: {p._name} with Device: {p._device._deviceId}")
-                    updatedPets.append(p)
+                    #get behavior stats if available - Now supported via health trends API
+                    try:
+                        p.updateBehaviorStats(self._session)
+                    except Exception as e:
+                        LOGGER.debug(f"Behavior stats not available for {p._name}: {e}")
+                    if p._device:
+                        LOGGER.debug(f"Adding Pet: {p._name} with Device: {p._device._deviceId}")
+                        updatedPets.append(p)
+                    else:
+                        LOGGER.info(f"Skipping Pet: {p._name} - no device assigned")
             self._pets = updatedPets
         except Exception as e:
             capture_exception(e)
@@ -220,9 +236,17 @@ class PyTryFi(object):
             #storing cookies but don't need them. Handled by session mgmt
             self._cookies = response.cookies
             #store unique userId from login for future use
-            self._userId = response.json()['userId']
-            self._sessionId = response.json()['sessionId']
-            LOGGER.debug(f"Successfully logged in. UserId: {self._userId}")
+            try:
+                login_data = response.json()
+                self._userId = login_data.get('userId')
+                self._sessionId = login_data.get('sessionId')
+                if not self._userId or not self._sessionId:
+                    LOGGER.error(f"Login response missing userId or sessionId: {login_data}")
+                    raise Exception("Invalid login response - missing userId or sessionId")
+                LOGGER.debug(f"Successfully logged in. UserId: {self._userId}")
+            except (KeyError, json.JSONDecodeError) as e:
+                LOGGER.error(f"Failed to parse login response: {response.text}")
+                raise Exception(f"Failed to parse login response: {e}")
         except requests.RequestException as e:
             LOGGER.error(f"Cannot login, error: ({e})")
             raise e

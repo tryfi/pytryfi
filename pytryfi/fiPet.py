@@ -1,9 +1,9 @@
 import datetime
 import logging
-from pytryfi.common import query
-from pytryfi.const import PET_ACTIVITY_ONGOINGWALK
-from pytryfi.exceptions import *
-from pytryfi.fiDevice import FiDevice
+from .common import query
+from .const import PET_ACTIVITY_ONGOINGWALK
+from .exceptions import *
+from .fiDevice import FiDevice
 from sentry_sdk import capture_exception
 
 LOGGER = logging.getLogger(__name__)
@@ -45,9 +45,51 @@ class FiPet(object):
             #capture_exception(e)
             LOGGER.warning(f"Cannot find photo of your pet. Defaulting to empty string.")
             self._photoLink = ""
-        self._device = FiDevice(petJSON['device']['id'])
-        self._device.setDeviceDetailsJSON(petJSON['device'])
-        self._connectedTo = self.setConnectedTo(petJSON['device']['lastConnectionState'])
+        # Check if pet has a device
+        if petJSON.get('device'):
+            self._device = FiDevice(petJSON['device']['id'])
+            self._device.setDeviceDetailsJSON(petJSON['device'])
+            self._connectedTo = self.setConnectedTo(petJSON['device']['lastConnectionState'])
+        else:
+            self._device = None
+            self._connectedTo = None
+            LOGGER.info(f"Pet {self._name} has no device assigned")
+        
+        # Initialize behavior metrics to 0 (will be updated later if available)
+        self._dailyBarkingCount = 0
+        self._dailyBarkingDuration = 0
+        self._weeklyBarkingCount = 0
+        self._weeklyBarkingDuration = 0
+        self._monthlyBarkingCount = 0
+        self._monthlyBarkingDuration = 0
+        
+        self._dailyLickingCount = 0
+        self._dailyLickingDuration = 0
+        self._weeklyLickingCount = 0
+        self._weeklyLickingDuration = 0
+        self._monthlyLickingCount = 0
+        self._monthlyLickingDuration = 0
+        
+        self._dailyScratchingCount = 0
+        self._dailyScratchingDuration = 0
+        self._weeklyScratchingCount = 0
+        self._weeklyScratchingDuration = 0
+        self._monthlyScratchingCount = 0
+        self._monthlyScratchingDuration = 0
+        
+        self._dailyEatingCount = 0
+        self._dailyEatingDuration = 0
+        self._weeklyEatingCount = 0
+        self._weeklyEatingDuration = 0
+        self._monthlyEatingCount = 0
+        self._monthlyEatingDuration = 0
+        
+        self._dailyDrinkingCount = 0
+        self._dailyDrinkingDuration = 0
+        self._weeklyDrinkingCount = 0
+        self._weeklyDrinkingDuration = 0
+        self._monthlyDrinkingCount = 0
+        self._monthlyDrinkingDuration = 0
 
     def __str__(self):
         return f"Last Updated - {self.lastUpdated} - Pet ID: {self.petId} Name: {self.name} Is Lost: {self.isLost} From: {self.homeCityState} ActivityType: {self.activityType} Located: {self.currLatitude},{self.currLongitude} Last Updated: {self.currStartTime}\n \
@@ -110,6 +152,102 @@ class FiPet(object):
         self._monthlyTotalDistance = float(activityJSONMonthly['totalDistance'])
 
         self._lastUpdated = datetime.datetime.now()
+
+    # set the Pet's behavior stats for daily, weekly and monthly
+    def setBehaviorStats(self, behaviorTrends):
+        # Initialize all behavior metrics to 0 as default
+        self._dailyBarkingCount = 0
+        self._dailyBarkingDuration = 0
+        self._weeklyBarkingCount = 0
+        self._weeklyBarkingDuration = 0
+        self._monthlyBarkingCount = 0
+        self._monthlyBarkingDuration = 0
+        
+        self._dailyLickingCount = 0
+        self._dailyLickingDuration = 0
+        self._weeklyLickingCount = 0
+        self._weeklyLickingDuration = 0
+        self._monthlyLickingCount = 0
+        self._monthlyLickingDuration = 0
+        
+        self._dailyScratchingCount = 0
+        self._dailyScratchingDuration = 0
+        self._weeklyScratchingCount = 0
+        self._weeklyScratchingDuration = 0
+        self._monthlyScratchingCount = 0
+        self._monthlyScratchingDuration = 0
+        
+        self._dailyEatingCount = 0
+        self._dailyEatingDuration = 0
+        self._weeklyEatingCount = 0
+        self._weeklyEatingDuration = 0
+        self._monthlyEatingCount = 0
+        self._monthlyEatingDuration = 0
+        
+        self._dailyDrinkingCount = 0
+        self._dailyDrinkingDuration = 0
+        self._weeklyDrinkingCount = 0
+        self._weeklyDrinkingDuration = 0
+        self._monthlyDrinkingCount = 0
+        self._monthlyDrinkingDuration = 0
+        
+        try:
+            # Parse the new health trends API format
+            for trend in behaviorTrends:
+                if not isinstance(trend, dict):
+                    continue
+                    
+                trend_id = trend.get('id', '')
+                summary = trend.get('summaryComponents', {})
+                
+                # Extract events count from eventsSummary (e.g., "10 events")
+                events_summary = summary.get('eventsSummary', '0 events')
+                events_count = 0
+                if 'event' in events_summary:
+                    try:
+                        events_count = int(events_summary.split()[0])
+                    except:
+                        pass
+                
+                # Extract duration from durationSummary (e.g., "7m" or "1h 5m")
+                duration_summary = summary.get('durationSummary', '0m')
+                duration_seconds = 0
+                try:
+                    # Handle "<1m" case
+                    if duration_summary.startswith('<'):
+                        duration_seconds = 30  # Assume 30 seconds for <1m
+                    else:
+                        # Parse hours and minutes
+                        parts = duration_summary.replace('h', '').replace('m', '').split()
+                        if len(parts) == 2:  # "1h 5m" format
+                            duration_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60
+                        elif 'h' in duration_summary:  # "1h" format
+                            duration_seconds = int(parts[0]) * 3600
+                        else:  # "5m" format
+                            duration_seconds = int(parts[0]) * 60
+                except:
+                    pass
+                
+                # Map trend IDs to our attributes (daily stats only for now)
+                if trend_id == 'barking:DAY':
+                    self._dailyBarkingCount = events_count
+                    self._dailyBarkingDuration = duration_seconds
+                elif trend_id == 'cleaning_self:DAY':  # This is licking
+                    self._dailyLickingCount = events_count
+                    self._dailyLickingDuration = duration_seconds
+                elif trend_id == 'scratching:DAY':
+                    self._dailyScratchingCount = events_count
+                    self._dailyScratchingDuration = duration_seconds
+                elif trend_id == 'eating:DAY':
+                    self._dailyEatingCount = events_count
+                    self._dailyEatingDuration = duration_seconds
+                elif trend_id == 'drinking:DAY':
+                    self._dailyDrinkingCount = events_count
+                    self._dailyDrinkingDuration = duration_seconds
+                    
+        except Exception as e:
+            LOGGER.warning(f"Unable to parse behavior metrics for Pet {self.name}. This may be an older collar model.\nException: {e}")
+            capture_exception(e)
 
     # set the Pet's current rest details for daily, weekly and monthly
     def setRestStats(self, restJSONDaily, restJSONWeekly, restJSONMonthly):
@@ -177,6 +315,19 @@ class FiPet(object):
             LOGGER.error(f"Could not update rest stats for Pet {self.name}.\n{e}")
             capture_exception(e)
 
+    # Update the behavior stats of the pet
+    def updateBehaviorStats(self, sessionId):
+        try:
+            # Get health trends which include behavior data
+            healthTrendsJSON = query.getPetHealthTrends(sessionId, self.petId, 'DAY')
+            behavior_trends = healthTrendsJSON.get('behaviorTrends', [])
+            self.setBehaviorStats(behavior_trends)
+            return True
+        except Exception as e:
+            LOGGER.warning(f"Could not update behavior stats for Pet {self.name}. This may be an older collar model.\n{e}")
+            # Don't capture exception for behavior stats as they may not be available on older collars
+            return False
+
     # Update the Pet's GPS location
     def updatePetLocation(self, sessionId):
         try:
@@ -205,6 +356,7 @@ class FiPet(object):
         self.updatePetLocation(sessionId)
         self.updateStats(sessionId)
         self.updateRestStats(sessionId)
+        self.updateBehaviorStats(sessionId)  # Now supported via health trends API
 
     # set the color code of the led light on the pet collar
     def setLedColorCode(self, sessionId, colorCode):
@@ -349,6 +501,106 @@ class FiPet(object):
     @property
     def monthlyNap(self):
         return self._monthlyNap
+    
+    # Barking properties
+    @property
+    def dailyBarkingCount(self):
+        return self._dailyBarkingCount
+    @property
+    def dailyBarkingDuration(self):
+        return self._dailyBarkingDuration
+    @property
+    def weeklyBarkingCount(self):
+        return self._weeklyBarkingCount
+    @property
+    def weeklyBarkingDuration(self):
+        return self._weeklyBarkingDuration
+    @property
+    def monthlyBarkingCount(self):
+        return self._monthlyBarkingCount
+    @property
+    def monthlyBarkingDuration(self):
+        return self._monthlyBarkingDuration
+    
+    # Licking properties
+    @property
+    def dailyLickingCount(self):
+        return self._dailyLickingCount
+    @property
+    def dailyLickingDuration(self):
+        return self._dailyLickingDuration
+    @property
+    def weeklyLickingCount(self):
+        return self._weeklyLickingCount
+    @property
+    def weeklyLickingDuration(self):
+        return self._weeklyLickingDuration
+    @property
+    def monthlyLickingCount(self):
+        return self._monthlyLickingCount
+    @property
+    def monthlyLickingDuration(self):
+        return self._monthlyLickingDuration
+    
+    # Scratching properties
+    @property
+    def dailyScratchingCount(self):
+        return self._dailyScratchingCount
+    @property
+    def dailyScratchingDuration(self):
+        return self._dailyScratchingDuration
+    @property
+    def weeklyScratchingCount(self):
+        return self._weeklyScratchingCount
+    @property
+    def weeklyScratchingDuration(self):
+        return self._weeklyScratchingDuration
+    @property
+    def monthlyScratchingCount(self):
+        return self._monthlyScratchingCount
+    @property
+    def monthlyScratchingDuration(self):
+        return self._monthlyScratchingDuration
+    
+    # Eating properties
+    @property
+    def dailyEatingCount(self):
+        return self._dailyEatingCount
+    @property
+    def dailyEatingDuration(self):
+        return self._dailyEatingDuration
+    @property
+    def weeklyEatingCount(self):
+        return self._weeklyEatingCount
+    @property
+    def weeklyEatingDuration(self):
+        return self._weeklyEatingDuration
+    @property
+    def monthlyEatingCount(self):
+        return self._monthlyEatingCount
+    @property
+    def monthlyEatingDuration(self):
+        return self._monthlyEatingDuration
+    
+    # Drinking properties
+    @property
+    def dailyDrinkingCount(self):
+        return self._dailyDrinkingCount
+    @property
+    def dailyDrinkingDuration(self):
+        return self._dailyDrinkingDuration
+    @property
+    def weeklyDrinkingCount(self):
+        return self._weeklyDrinkingCount
+    @property
+    def weeklyDrinkingDuration(self):
+        return self._weeklyDrinkingDuration
+    @property
+    def monthlyDrinkingCount(self):
+        return self._monthlyDrinkingCount
+    @property
+    def monthlyDrinkingDuration(self):
+        return self._monthlyDrinkingDuration
 
     @property
     def lastUpdated(self):
