@@ -1,9 +1,9 @@
 import datetime
 import logging
-from pytryfi.common import query
-from pytryfi.const import PET_ACTIVITY_ONGOINGWALK
-from pytryfi.exceptions import *
-from pytryfi.fiDevice import FiDevice
+from .common import query
+from .const import PET_ACTIVITY_ONGOINGWALK
+from .exceptions import *
+from .fiDevice import FiDevice
 from sentry_sdk import capture_exception
 
 LOGGER = logging.getLogger(__name__)
@@ -45,9 +45,15 @@ class FiPet(object):
             #capture_exception(e)
             LOGGER.warning(f"Cannot find photo of your pet. Defaulting to empty string.")
             self._photoLink = ""
-        self._device = FiDevice(petJSON['device']['id'])
-        self._device.setDeviceDetailsJSON(petJSON['device'])
-        self._connectedTo = self.setConnectedTo(petJSON['device']['lastConnectionState'])
+        # Check if pet has a device
+        if petJSON.get('device'):
+            self._device = FiDevice(petJSON['device']['id'])
+            self._device.setDeviceDetailsJSON(petJSON['device'])
+            self._connectedTo = self.setConnectedTo(petJSON['device']['lastConnectionState'])
+        else:
+            self._device = None
+            self._connectedTo = None
+            LOGGER.info(f"Pet {self._name} has no device assigned")
         
         # Initialize behavior metrics to 0 (will be updated later if available)
         self._dailyBarkingCount = 0
@@ -353,7 +359,7 @@ class FiPet(object):
         self.updatePetLocation(sessionId)
         self.updateStats(sessionId)
         self.updateRestStats(sessionId)
-        self.updateBehaviorStats(sessionId)
+        # self.updateBehaviorStats(sessionId)  # Commented until API supports it
 
     # set the color code of the led light on the pet collar
     def setLedColorCode(self, sessionId, colorCode):

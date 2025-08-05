@@ -1,7 +1,8 @@
 import logging
 import datetime
-from pytryfi.ledColors import ledColors
-from pytryfi.const import PET_MODE_NORMAL, PET_MODE_LOST
+import json
+from .ledColors import ledColors
+from .const import PET_MODE_NORMAL, PET_MODE_LOST
 from sentry_sdk import capture_exception
 
 LOGGER = logging.getLogger(__name__)
@@ -12,6 +13,10 @@ class FiDevice(object):
     
     def setDeviceDetailsJSON(self, deviceJSON):
         try:
+            # Log the raw device JSON to see what fields are available
+            LOGGER.info(f"TryFi Device {deviceJSON.get('moduleId', 'unknown')} info field contains: {list(deviceJSON.get('info', {}).keys())}")
+            LOGGER.info(f"TryFi Device {deviceJSON.get('moduleId', 'unknown')} root fields: {list(deviceJSON.keys())}")
+            
             self._moduleId = deviceJSON['moduleId']
             self._buildId = deviceJSON['info']['buildId']
             self._batteryPercent = int(deviceJSON['info']['batteryPercent'])
@@ -36,12 +41,35 @@ class FiDevice(object):
                 c = ledColors(int(cString['ledColorCode']),cString['hexCode'], cString['name'] )
                 self._availableLedColors.append(c)
             
-            # Enhanced Series 3+ fields (may not be available on older collars)
-            self._firmwareVersion = deviceJSON.get('firmwareVersion', 'Unknown')
-            self._hardwareVersion = deviceJSON.get('hardwareVersion', 'Unknown')
-            self._gpsAccuracy = deviceJSON.get('gpsAccuracy', None)
-            self._signalStrength = deviceJSON.get('signalStrength', None)
-            self._signalType = deviceJSON.get('signalType', None)
+            # Enhanced device fields (may not be available on older collars)
+            self._hardwareRevision = deviceJSON.get('hardwareRevision', 'Unknown')
+            
+            # Extract additional info fields if available
+            info = deviceJSON.get('info', {})
+            self._batteryVoltage = info.get('batteryVoltage', None)
+            self._temperature = info.get('temperature', None)
+            self._uptime = info.get('uptime', None)
+            
+            # Log other available fields for investigation
+            LOGGER.info(f"TryFi Device - wifiNetworkNames: {info.get('wifiNetworkNames', 'N/A')}")
+            LOGGER.info(f"TryFi Device - capabilityFlags: {info.get('capabilityFlags', 'N/A')}")
+            LOGGER.info(f"TryFi Device - deviceStats: {info.get('deviceStats', 'N/A')}")
+            LOGGER.info(f"TryFi Device - selfTestResults: {info.get('selfTestResults', 'N/A')}")
+            LOGGER.info(f"TryFi Device - wallClockSec: {info.get('wallClockSec', 'N/A')}")
+            LOGGER.info(f"TryFi Device - batteryResistanceProfile: {info.get('batteryResistanceProfile', 'N/A')}")
+            
+            # Extract more useful fields
+            self._wifiNetworkNames = info.get('wifiNetworkNames', [])
+            self._capabilityFlags = info.get('capabilityFlags', {})
+            self._deviceStats = info.get('deviceStats', {})
+            self._selfTestResults = info.get('selfTestResults', {})
+            self._wallClockSec = info.get('wallClockSec', None)
+            
+            # Try to get signal strength from connection state if available
+            if 'lastConnectionState' in deviceJSON and deviceJSON['lastConnectionState'].get('__typename') == 'ConnectedToCellular':
+                self._signalStrength = deviceJSON['lastConnectionState'].get('signalStrengthPercent', None)
+            else:
+                self._signalStrength = None
         except Exception as e:
             LOGGER.debug(f"tryfi Error: {e}")
             capture_exception(e)
@@ -102,20 +130,43 @@ class FiDevice(object):
         else:
             return False
     @property
-    def firmwareVersion(self):
-        return self._firmwareVersion
-    @property
-    def hardwareVersion(self):
-        return self._hardwareVersion
-    @property
-    def gpsAccuracy(self):
-        return self._gpsAccuracy
+    def hardwareRevision(self):
+        return self._hardwareRevision
     @property
     def signalStrength(self):
         return self._signalStrength
+    
     @property
-    def signalType(self):
-        return self._signalType
+    def batteryVoltage(self):
+        return self._batteryVoltage
+    
+    @property
+    def temperature(self):
+        return self._temperature
+    
+    @property
+    def uptime(self):
+        return self._uptime
+    
+    @property
+    def wifiNetworkNames(self):
+        return self._wifiNetworkNames
+    
+    @property
+    def capabilityFlags(self):
+        return self._capabilityFlags
+    
+    @property
+    def deviceStats(self):
+        return self._deviceStats
+    
+    @property
+    def selfTestResults(self):
+        return self._selfTestResults
+    
+    @property
+    def wallClockSec(self):
+        return self._wallClockSec
 
 #This is created because if TryFi automatically turns off the LED, the status is still set to true in the api.
 #This will compare the dates to see if the current date/time is greater than the turnoffat time in the api.
