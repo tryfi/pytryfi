@@ -53,6 +53,46 @@ def getCurrentPetRestStats(sessionId, petId):
     LOGGER.debug(f"getCurrentPetStats: {response}")
     return response['data']['pet']
 
+def getPetHealthTrends(sessionId, petId, period='DAY'):
+    """Get pet health trends including behavior data"""
+    # Build the query with the health trends fragment inline
+    qString = f"""
+    query PetHealthTrends {{
+        getPetHealthTrendsForPet(petId: "{petId}", period: {period}) {{
+            __typename
+            period
+            behaviorTrends {{
+                __typename
+                id
+                title
+                summaryComponents {{
+                    __typename
+                    eventsSummary
+                    durationSummary
+                }}
+                chart {{
+                    __typename
+                    ... on PetHealthTrendSegmentedTimeline {{
+                        __typename
+                        length
+                        dataEnd
+                        segments: intervals {{
+                            __typename
+                            offset
+                            length
+                            color
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+    """
+    
+    response = query(sessionId, qString)
+    LOGGER.debug(f"getPetHealthTrends: {response}")
+    return response['data']['getPetHealthTrendsForPet']
+
 def getDevicedetails(sessionId, petId):
     qString = QUERY_PET_DEVICE_DETAILS.replace(VAR_PET_ID, petId) + FRAGMENT_PET_PROFILE + FRAGEMENT_BASE_PET_PROFILE + FRAGMENT_DEVICE_DETAILS + FRAGMENT_LED_DETAILS + FRAGMENT_OPERATIONAL_DETAILS + FRAGMENT_CONNECTION_STATE_DETAILS + FRAGMENT_USER_DETAILS + FRAGMENT_BREED_DETAILS + FRAGMENT_PHOTO_DETAILS
     response = query(sessionId, qString)
@@ -92,14 +132,53 @@ def mutation(sessionId, qString, qVariables):
     url = getGraphqlURL()
     
     params = {"query": qString, "variables": json.loads(qVariables)}
-    jsonObject = execute(url, sessionId, params=params, method='POST').json()
+    response = execute(url, sessionId, params=params, method='POST')
+    
+    # Check HTTP status
+    if response.status_code != 200:
+        LOGGER.error(f"GraphQL mutation failed with status {response.status_code}: {response.text}")
+        raise TryFiError(f"GraphQL mutation failed with status {response.status_code}")
+    
+    try:
+        jsonObject = response.json()
+    except json.JSONDecodeError as e:
+        LOGGER.error(f"Failed to decode JSON response: {response.text}")
+        raise TryFiError(f"Invalid JSON response from API: {e}")
+    
+    # Check for GraphQL errors
+    if 'errors' in jsonObject:
+        LOGGER.error(f"GraphQL errors: {jsonObject['errors']}")
+        raise TryFiError(f"GraphQL errors: {jsonObject['errors']}")
+    
     return jsonObject
 
 def query(sessionId : requests.Session, qString):
     jsonObject = None
     url = getGraphqlURL()
     params={'query': qString}
-    jsonObject = execute(url, sessionId, params=params).json()
+    response = execute(url, sessionId, params=params)
+    
+    # Check HTTP status
+    if response.status_code != 200:
+        LOGGER.error(f"GraphQL query failed with status {response.status_code}: {response.text}")
+        raise TryFiError(f"GraphQL query failed with status {response.status_code}")
+    
+    try:
+        jsonObject = response.json()
+    except json.JSONDecodeError as e:
+        LOGGER.error(f"Failed to decode JSON response: {response.text}")
+        raise TryFiError(f"Invalid JSON response from API: {e}")
+    
+    # Check for GraphQL errors
+    if 'errors' in jsonObject:
+        LOGGER.error(f"GraphQL errors: {jsonObject['errors']}")
+        raise TryFiError(f"GraphQL errors: {jsonObject['errors']}")
+    
+    # Check if data exists
+    if 'data' not in jsonObject:
+        LOGGER.error(f"No data in GraphQL response: {jsonObject}")
+        raise TryFiError("No data in GraphQL response")
+    
     return jsonObject
 
 def execute(url : str, sessionId : requests.Session, method: Literal['GET', 'POST'] = 'GET', params=None, cookies=None):
