@@ -11,6 +11,7 @@ LOGGER = logging.getLogger(__name__)
 class FiPet(object):
     def __init__(self, petId):
         self._petId = petId
+        self._name = None  # Initialize to None, will be set by setPetDetailsJSON
 
     def setPetDetailsJSON(self, petJSON: dict):
         self._name = petJSON.get('name')
@@ -177,6 +178,168 @@ class FiPet(object):
             LOGGER.error(f"Could not update rest stats for Pet {self.name}.\n{e}")
             capture_exception(e)
 
+    # Update the behavior stats of the pet
+    def updateBehaviorStats(self, sessionId):
+        try:
+            LOGGER.info(f"Updating behavior stats for pet {self.name or 'unknown'} (ID: {self.petId})")
+            # Get health trends which include behavior data
+            healthTrendsJSON = query.getPetHealthTrends(sessionId, self.petId, 'DAY')
+            LOGGER.info(f"Got health trends response for {self.name or 'unknown'}: {healthTrendsJSON}")
+            behavior_trends = healthTrendsJSON.get('behaviorTrends', [])
+            LOGGER.info(f"Found {len(behavior_trends)} behavior trends for {self.name or 'unknown'}")
+            self.setBehaviorStatsFromTrends(behavior_trends)
+            return True
+        except Exception as e:
+            LOGGER.warning(f"Could not update behavior stats for Pet {self.name or 'unknown'}. This may be an older collar model.\n{e}")
+            # Don't capture exception for behavior stats as they may not be available on older collars
+            return False
+
+    # Parse behavior timeline data from health trends API
+    def setBehaviorStatsFromTrends(self, behaviorTrends):
+        """Parse behavior data from health trends API including timeline"""
+        LOGGER.info(f"setBehaviorStatsFromTrends called for {self.name or 'unknown pet'} with {len(behaviorTrends)} trends")
+        
+        # Initialize all behavior metrics to 0 as default
+        self._dailyBarkingCount = 0
+        self._dailyBarkingDuration = 0
+        self._dailyLickingCount = 0
+        self._dailyLickingDuration = 0
+        self._dailyScratchingCount = 0
+        self._dailyScratchingDuration = 0
+        self._dailyEatingCount = 0
+        self._dailyEatingDuration = 0
+        self._dailyDrinkingCount = 0
+        self._dailyDrinkingDuration = 0
+        
+        # Initialize timeline
+        self._behaviorTimeline = []
+        
+        try:
+            # Parse the new health trends API format
+            for trend in behaviorTrends:
+                if not isinstance(trend, dict):
+                    continue
+                    
+                trend_id = trend.get('id', '')
+                summary = trend.get('summaryComponents', {})
+                
+                # Extract events count from eventsSummary (e.g., "10 events")
+                events_summary = summary.get('eventsSummary')
+                events_count = 0
+                if events_summary and 'event' in events_summary:
+                    try:
+                        events_count = int(events_summary.split()[0])
+                    except:
+                        pass
+                
+                # Extract duration from durationSummary (e.g., "7m" or "1h 5m")
+                duration_summary = summary.get('durationSummary')
+                duration_seconds = 0
+                if duration_summary:
+                    try:
+                        # Handle "<1m" case
+                        if duration_summary.startswith('<'):
+                            duration_seconds = 30  # Assume 30 seconds for <1m
+                        else:
+                            # Parse hours and minutes
+                            parts = duration_summary.replace('h', '').replace('m', '').split()
+                            if len(parts) == 2:  # "1h 5m" format
+                                duration_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60
+                            elif 'h' in duration_summary:  # "1h" format
+                                duration_seconds = int(parts[0]) * 3600
+                            else:  # "5m" format
+                                duration_seconds = int(parts[0]) * 60
+                    except:
+                        pass
+                
+                # Parse timeline data if available
+                chart = trend.get('chart', {})
+                if chart.get('__typename') == 'PetHealthTrendSegmentedTimeline':
+                    timeline_events = self._parseTimelineSegments(trend_id, trend.get('title', ''), chart)
+                    self._behaviorTimeline.extend(timeline_events)
+                
+                # Map trend IDs to our attributes (daily stats only for now)
+                if trend_id == 'barking:DAY':
+                    self._dailyBarkingCount = events_count
+                    self._dailyBarkingDuration = duration_seconds
+                elif trend_id == 'cleaning_self:DAY':  # This is licking
+                    self._dailyLickingCount = events_count
+                    self._dailyLickingDuration = duration_seconds
+                    LOGGER.info(f"Set {self.name or 'unknown pet'} licking: {events_count} events, {duration_seconds} seconds")
+                elif trend_id == 'scratching:DAY':
+                    self._dailyScratchingCount = events_count
+                    self._dailyScratchingDuration = duration_seconds
+                    LOGGER.info(f"Set {self.name or 'unknown pet'} scratching: {events_count} events, {duration_seconds} seconds")
+                elif trend_id == 'eating:DAY':
+                    self._dailyEatingCount = events_count
+                    self._dailyEatingDuration = duration_seconds
+                elif trend_id == 'drinking:DAY':
+                    self._dailyDrinkingCount = events_count
+                    self._dailyDrinkingDuration = duration_seconds
+                    
+        except Exception as e:
+            LOGGER.warning(f"Unable to parse behavior metrics for Pet {self.name or 'unknown'}. This may be an older collar model.\nException: {e}")
+            capture_exception(e)
+    
+    def _parseTimelineSegments(self, trend_id, title, chart):
+        """Parse timeline segments to extract individual behavior events"""
+        events = []
+        
+        try:
+            segments = chart.get('segments', [])
+            if not segments:
+                return events
+            
+            # Identify background color (most common duration)
+            color_durations = {}
+            for seg in segments:
+                color = seg.get('color', '')
+                duration = seg.get('length', 0)
+                if color not in color_durations:
+                    color_durations[color] = 0
+                color_durations[color] += duration
+            
+            # Background color has the most total duration
+            if color_durations:
+                background_color = max(color_durations.items(), key=lambda x: x[1])[0]
+                
+                # Extract events (non-background segments)
+                for seg in segments:
+                    if seg.get('color') != background_color and seg.get('length', 0) > 0:
+                        # Get midnight of current day
+                        from datetime import datetime, timedelta
+                        now = datetime.now()
+                        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        
+                        # Calculate event time
+                        start_time = midnight + timedelta(seconds=seg.get('offset', 0))
+                        end_time = midnight + timedelta(seconds=seg.get('offset', 0) + seg.get('length', 0))
+                        
+                        # Determine behavior type from trend_id
+                        behavior_type = 'unknown'
+                        if 'barking' in trend_id:
+                            behavior_type = 'barking'
+                        elif 'cleaning_self' in trend_id:
+                            behavior_type = 'licking'
+                        elif 'scratching' in trend_id:
+                            behavior_type = 'scratching'
+                        elif 'eating' in trend_id:
+                            behavior_type = 'eating'
+                        elif 'drinking' in trend_id:
+                            behavior_type = 'drinking'
+                        
+                        events.append({
+                            'type': behavior_type,
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'duration_seconds': seg.get('length', 0)
+                        })
+                        
+        except Exception as e:
+            LOGGER.debug(f"Error parsing timeline segments: {e}")
+            
+        return events
+
     # Update the Pet's GPS location
     def updatePetLocation(self, sessionId):
         try:
@@ -205,6 +368,7 @@ class FiPet(object):
         self.updatePetLocation(sessionId)
         self.updateStats(sessionId)
         self.updateRestStats(sessionId)
+        self.updateBehaviorStats(sessionId)  # Update behavior stats for Series 3+ collars
 
     # set the color code of the led light on the pet collar
     def setLedColorCode(self, sessionId, colorCode):
@@ -405,4 +569,130 @@ class FiPet(object):
 
     def getMonthlyDistance(self):
         return self.monthlyTotalDistance
+    
+    # Behavior properties
+    @property
+    def dailyBarkingCount(self):
+        return getattr(self, '_dailyBarkingCount', 0)
+    
+    @property
+    def dailyBarkingDuration(self):
+        return getattr(self, '_dailyBarkingDuration', 0)
+    
+    @property
+    def weeklyBarkingCount(self):
+        return getattr(self, '_weeklyBarkingCount', 0)
+    
+    @property
+    def weeklyBarkingDuration(self):
+        return getattr(self, '_weeklyBarkingDuration', 0)
+    
+    @property
+    def monthlyBarkingCount(self):
+        return getattr(self, '_monthlyBarkingCount', 0)
+    
+    @property
+    def monthlyBarkingDuration(self):
+        return getattr(self, '_monthlyBarkingDuration', 0)
+    
+    @property
+    def dailyLickingCount(self):
+        return getattr(self, '_dailyLickingCount', 0)
+    
+    @property
+    def dailyLickingDuration(self):
+        return getattr(self, '_dailyLickingDuration', 0)
+    
+    @property
+    def weeklyLickingCount(self):
+        return getattr(self, '_weeklyLickingCount', 0)
+    
+    @property
+    def weeklyLickingDuration(self):
+        return getattr(self, '_weeklyLickingDuration', 0)
+    
+    @property
+    def monthlyLickingCount(self):
+        return getattr(self, '_monthlyLickingCount', 0)
+    
+    @property
+    def monthlyLickingDuration(self):
+        return getattr(self, '_monthlyLickingDuration', 0)
+    
+    @property
+    def dailyScratchingCount(self):
+        return getattr(self, '_dailyScratchingCount', 0)
+    
+    @property
+    def dailyScratchingDuration(self):
+        return getattr(self, '_dailyScratchingDuration', 0)
+    
+    @property
+    def weeklyScratchingCount(self):
+        return getattr(self, '_weeklyScratchingCount', 0)
+    
+    @property
+    def weeklyScratchingDuration(self):
+        return getattr(self, '_weeklyScratchingDuration', 0)
+    
+    @property
+    def monthlyScratchingCount(self):
+        return getattr(self, '_monthlyScratchingCount', 0)
+    
+    @property
+    def monthlyScratchingDuration(self):
+        return getattr(self, '_monthlyScratchingDuration', 0)
+    
+    @property
+    def dailyEatingCount(self):
+        return getattr(self, '_dailyEatingCount', 0)
+    
+    @property
+    def dailyEatingDuration(self):
+        return getattr(self, '_dailyEatingDuration', 0)
+    
+    @property
+    def weeklyEatingCount(self):
+        return getattr(self, '_weeklyEatingCount', 0)
+    
+    @property
+    def weeklyEatingDuration(self):
+        return getattr(self, '_weeklyEatingDuration', 0)
+    
+    @property
+    def monthlyEatingCount(self):
+        return getattr(self, '_monthlyEatingCount', 0)
+    
+    @property
+    def monthlyEatingDuration(self):
+        return getattr(self, '_monthlyEatingDuration', 0)
+    
+    @property
+    def dailyDrinkingCount(self):
+        return getattr(self, '_dailyDrinkingCount', 0)
+    
+    @property
+    def dailyDrinkingDuration(self):
+        return getattr(self, '_dailyDrinkingDuration', 0)
+    
+    @property
+    def weeklyDrinkingCount(self):
+        return getattr(self, '_weeklyDrinkingCount', 0)
+    
+    @property
+    def weeklyDrinkingDuration(self):
+        return getattr(self, '_weeklyDrinkingDuration', 0)
+    
+    @property
+    def monthlyDrinkingCount(self):
+        return getattr(self, '_monthlyDrinkingCount', 0)
+    
+    @property
+    def monthlyDrinkingDuration(self):
+        return getattr(self, '_monthlyDrinkingDuration', 0)
+    
+    @property
+    def behaviorTimeline(self):
+        """Get the behavior timeline events"""
+        return getattr(self, '_behaviorTimeline', [])
         
